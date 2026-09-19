@@ -67,6 +67,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _budgeting = true;
   bool _rollover = false;
   bool _recurringAutoApply = false;
+  bool _transactionsFoldingMode = true;
   bool _twoFa = true;
   bool _shareAnalytics = false;
   String _planId = 'plus-family';
@@ -108,6 +109,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (data['recurringAutoApply'] is bool) {
         _recurringAutoApply = data['recurringAutoApply'] as bool;
       }
+      if (data['transactionsFoldingMode'] is bool) {
+        _transactionsFoldingMode = data['transactionsFoldingMode'] as bool;
+      }
       final name = (data['full_name'] as String?)?.trim();
       if (name != null && name.isNotEmpty) {
         _nameCtrl.text = name;
@@ -129,6 +133,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'PATCH',
       '/api/profile',
       body: {'recurringAutoApply': value},
+    );
+  }
+
+  Future<void> _setTransactionsFoldingMode(bool value) async {
+    setState(() => _transactionsFoldingMode = value);
+    final auth = AuthScope.read(context);
+    await auth.apiDecode(
+      'PATCH',
+      '/api/profile',
+      body: {'transactionsFoldingMode': value},
     );
   }
 
@@ -307,6 +321,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: (v) {
             // ignore: discarded_futures
             _setRecurringAutoApply(v);
+          },
+        ),
+        const SizedBox(height: 8),
+        const _BlockTitle('Transactions'),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Folding mode'),
+          subtitle: const Text(
+            'When scrolling Transactions, fold search and cashflow stats into a sticky header',
+          ),
+          value: _transactionsFoldingMode,
+          onChanged: (v) {
+            // ignore: discarded_futures
+            _setTransactionsFoldingMode(v);
           },
         ),
         const SizedBox(height: 8),

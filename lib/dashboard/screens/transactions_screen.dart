@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
+import '../../auth/auth_scope.dart';
 import '../accounts_controller.dart';
 import '../accounts_scope.dart';
 import '../dash_sheets.dart';
@@ -678,6 +679,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   late List<FilterRule> _filterRules;
   List<SortRule> _sortRules = [];
   String _search = '';
+  final _scroll = ScrollController();
+  bool _stickyPinned = false;
+  bool _stickyStatsOpen = false;
+  bool _stickyInteract = false;
+  bool _foldingEnabled = true;
 
   TransactionsController get _ctrl => TransactionsScope.of(context);
   List<DemoTxn> get _txns => _ctrl.transactions;
@@ -685,6 +691,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_onScroll);
     final filter = widget.categoryFilter?.trim();
     _filterRules = filter != null && filter.isNotEmpty
         ? [
@@ -696,6 +703,49 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             ),
           ]
         : [];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // ignore: discarded_futures
+      _loadFoldingPref();
+    });
+  }
+
+  Future<void> _loadFoldingPref() async {
+    final auth = AuthScope.read(context);
+    final data = await auth.apiDecode('GET', '/api/profile');
+    if (!mounted || data is! Map<String, dynamic>) return;
+    if (data['transactionsFoldingMode'] is bool) {
+      setState(() {
+        _foldingEnabled = data['transactionsFoldingMode'] as bool;
+        if (!_foldingEnabled) {
+          _stickyPinned = false;
+          _stickyStatsOpen = false;
+          _stickyInteract = false;
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scroll.removeListener(_onScroll);
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_foldingEnabled) return;
+    if (!_scroll.hasClients) return;
+    if (_stickyInteract) {
+      if (!_stickyPinned) setState(() => _stickyPinned = true);
+      return;
+    }
+    final threshold = MediaQuery.sizeOf(context).height * 0.9;
+    final next = _scroll.offset >= threshold;
+    if (next == _stickyPinned) return;
+    setState(() {
+      _stickyPinned = next;
+      if (!next) _stickyStatsOpen = false;
+    });
   }
 
   @override
@@ -1036,154 +1086,210 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final buckets = _buildCashflowBuckets(filtered);
     final categoryFilter = widget.categoryFilter?.trim();
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 28),
+    return Stack(
       children: [
-        DashPageHeader(
-          title: 'Transactions',
-          subtitle: categoryFilter != null && categoryFilter.isNotEmpty
-              ? 'Filtered · Category is $categoryFilter'
-              : 'All payments across linked accounts',
-          actions: [
-            GhostButton(label: 'Export CSV', onPressed: _exportCsv),
-            AccentButton(label: 'Add', onPressed: _openAddSheet),
-          ],
-        ),
-        if (_ctrl.loading)
-          const DashLoadingBody(kpiCount: 2, listRows: 7)
-        else ...[
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-          child: FilterSortBar(
-            fields: _filterFields,
-            rules: _filterRules,
-            sorts: _sortRules,
-            selectOptions: _selectOptions,
-            defaultFilterField: 'category',
-            defaultSortField: 'date',
-            search: _search,
-            onSearchChanged: (v) => setState(() => _search = v),
-            searchHint: 'Search transactions…',
-            onRulesChanged: (rules) => setState(() => _filterRules = rules),
-            onSortsChanged: (sorts) => setState(() => _sortRules = sorts),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _CashflowKpiCard(
-                  label: 'Inflow (filtered)',
-                  value: money(inflow),
-                  buckets: buckets,
-                  metric: _CashMetric.inflow,
-                  onOpen: () => _openCashflowDetail(
-                    filtered,
-                    _CashMetric.inflow,
+        ListView(
+          controller: _scroll,
+          padding: const EdgeInsets.only(bottom: 28),
+          children: [
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOut,
+              opacity: _stickyPinned ? 0.35 : 1,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  DashPageHeader(
+                    title: 'Transactions',
+                    subtitle:
+                        categoryFilter != null && categoryFilter.isNotEmpty
+                            ? 'Filtered · Category is $categoryFilter'
+                            : 'All payments across linked accounts',
+                    actions: [
+                      GhostButton(label: 'Export CSV', onPressed: _exportCsv),
+                      AccentButton(label: 'Add', onPressed: _openAddSheet),
+                    ],
                   ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _CashflowKpiCard(
-                  label: 'Outflow (filtered)',
-                  value: money(outflow),
-                  buckets: buckets,
-                  metric: _CashMetric.outflow,
-                  onOpen: () => _openCashflowDetail(
-                    filtered,
-                    _CashMetric.outflow,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: _CashflowKpiCard(
-            label: 'Net',
-            value: money(net, signed: true),
-            buckets: buckets,
-            metric: _CashMetric.net,
-            onOpen: () => _openCashflowDetail(filtered, _CashMetric.net),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: DashPanel(
-            child: Column(
-              children: [
-                DashPanelHeader(
-                  title: 'Payments',
-                  subtitle: '${filtered.length} of ${_txns.length} shown',
-                  action: LinkAction(
-                    label: 'Reconcile',
-                    onTap: _openReconcileSheet,
-                  ),
-                ),
-                if (filtered.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 24, 16, 28),
-                    child: Text(
-                      'No transactions match these filters',
-                      style: TextStyle(
-                        color: AppColors.mute,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                  if (_ctrl.loading)
+                    const DashLoadingBody(kpiCount: 2, listRows: 7)
+                  else ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                      child: IgnorePointer(
+                        ignoring: _stickyPinned,
+                        child: Opacity(
+                          opacity: _stickyPinned ? 0 : 1,
+                          child: FilterSortBar(
+                            fields: _filterFields,
+                            rules: _filterRules,
+                            sorts: _sortRules,
+                            selectOptions: _selectOptions,
+                            defaultFilterField: 'category',
+                            defaultSortField: 'date',
+                            search: _search,
+                            onSearchChanged: (v) =>
+                                setState(() => _search = v),
+                            searchHint: 'Search transactions…',
+                            onRulesChanged: (rules) =>
+                                setState(() => _filterRules = rules),
+                            onSortsChanged: (sorts) =>
+                                setState(() => _sortRules = sorts),
+                          ),
+                        ),
                       ),
                     ),
-                  )
-                else
-                  for (final t in filtered)
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                      decoration: const BoxDecoration(
-                        border: Border(top: BorderSide(color: AppColors.line)),
-                      ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(
-                            child: Column(
+                            child: _CashflowKpiCard(
+                              label: 'Inflow (filtered)',
+                              value: money(inflow),
+                              buckets: buckets,
+                              metric: _CashMetric.inflow,
+                              onOpen: () => _openCashflowDetail(
+                                filtered,
+                                _CashMetric.inflow,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _CashflowKpiCard(
+                              label: 'Outflow (filtered)',
+                              value: money(outflow),
+                              buckets: buckets,
+                              metric: _CashMetric.outflow,
+                              onOpen: () => _openCashflowDetail(
+                                filtered,
+                                _CashMetric.outflow,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: _CashflowKpiCard(
+                        label: 'Net',
+                        value: money(net, signed: true),
+                        buckets: buckets,
+                        metric: _CashMetric.net,
+                        onOpen: () =>
+                            _openCashflowDetail(filtered, _CashMetric.net),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ],
+              ),
+            ),
+            if (!_ctrl.loading)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: DashPanel(
+                  child: Column(
+                    children: [
+                      DashPanelHeader(
+                        title: 'Payments',
+                        subtitle:
+                            '${filtered.length} of ${_txns.length} shown',
+                        action: LinkAction(
+                          label: 'Reconcile',
+                          onTap: _openReconcileSheet,
+                        ),
+                      ),
+                      if (filtered.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(16, 24, 16, 28),
+                          child: Text(
+                            'No transactions match these filters',
+                            style: TextStyle(
+                              color: AppColors.mute,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        )
+                      else
+                        for (final t in filtered)
+                          Container(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                            decoration: const BoxDecoration(
+                              border: Border(
+                                top: BorderSide(color: AppColors.line),
+                              ),
+                            ),
+                            child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  t.merchant,
-                                  style: const TextStyle(
-                                    color: AppColors.ink,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${t.category} · ${t.account}',
-                                  style: const TextStyle(
-                                    color: AppColors.mute,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Wrap(
-                                  spacing: 6,
-                                  runSpacing: 6,
-                                  children: [
-                                    TypePill(type: t.type),
-                                    StatusPill(status: t.status),
-                                    ApprovalActions(
-                                      status: t.approvalStatus,
-                                      onApprove: () => _setApproval(
-                                        t.id,
-                                        ApprovalStatus.approved,
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        t.merchant,
+                                        style: const TextStyle(
+                                          color: AppColors.ink,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
-                                      onReject: () => _setApproval(
-                                        t.id,
-                                        ApprovalStatus.rejected,
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${t.category} · ${t.account}',
+                                        style: const TextStyle(
+                                          color: AppColors.mute,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: 6,
+                                        children: [
+                                          TypePill(type: t.type),
+                                          StatusPill(status: t.status),
+                                          ApprovalActions(
+                                            status: t.approvalStatus,
+                                            onApprove: () => _setApproval(
+                                              t.id,
+                                              ApprovalStatus.approved,
+                                            ),
+                                            onReject: () => _setApproval(
+                                              t.id,
+                                              ApprovalStatus.rejected,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      money(t.amount, signed: true),
+                                      style: TextStyle(
+                                        color: t.amount > 0
+                                            ? AppColors.success
+                                            : AppColors.ink,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      t.date,
+                                      style: const TextStyle(
+                                        color: AppColors.mute,
+                                        fontSize: 12,
                                       ),
                                     ),
                                   ],
@@ -1191,38 +1297,252 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               ],
                             ),
                           ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                money(t.amount, signed: true),
-                                style: TextStyle(
-                                  color: t.amount > 0
-                                      ? AppColors.success
-                                      : AppColors.ink,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                t.date,
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          child: IgnorePointer(
+            ignoring: !(_foldingEnabled && _stickyPinned),
+            child: AnimatedSlide(
+              duration: const Duration(milliseconds: 300),
+              curve: _foldingEnabled && _stickyPinned
+                  ? const Cubic(0.22, 1, 0.36, 1)
+                  : Curves.easeIn,
+              offset: _foldingEnabled && _stickyPinned
+                  ? Offset.zero
+                  : const Offset(0, -1.1),
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 260),
+                opacity: _foldingEnabled && _stickyPinned ? 1 : 0,
+                child: Focus(
+                  onFocusChange: (hasFocus) {
+                    _stickyInteract = hasFocus;
+                    if (!hasFocus) {
+                      _onScroll();
+                    } else if (!_stickyPinned) {
+                      setState(() => _stickyPinned = true);
+                    }
+                  },
+                  child: Material(
+                  color: Colors.white,
+                  elevation: 6,
+                  shadowColor: Colors.black26,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 12, 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                categoryFilter != null &&
+                                        categoryFilter.isNotEmpty
+                                    ? 'Filtered · Category is $categoryFilter'
+                                    : 'All payments across linked accounts',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  color: AppColors.mute,
-                                  fontSize: 12,
+                                  color: AppColors.ink,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                            ],
-                          ),
-                        ],
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: FilterSortBar(
+                                fields: _filterFields,
+                                rules: _filterRules,
+                                sorts: _sortRules,
+                                selectOptions: _selectOptions,
+                                defaultFilterField: 'category',
+                                defaultSortField: 'date',
+                                search: _search,
+                                onSearchChanged: (v) =>
+                                    setState(() => _search = v),
+                                searchHint: 'Search transactions…',
+                                onRulesChanged: (rules) =>
+                                    setState(() => _filterRules = rules),
+                                onSortsChanged: (sorts) =>
+                                    setState(() => _sortRules = sorts),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            OutlinedButton(
+                              onPressed: () => setState(
+                                () => _stickyStatsOpen = !_stickyStatsOpen,
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: _stickyStatsOpen
+                                    ? const Color(0xFF2A7FC4)
+                                    : AppColors.ink,
+                                backgroundColor: _stickyStatsOpen
+                                    ? const Color(0xFFF5F9FD)
+                                    : Colors.white,
+                                side: BorderSide(
+                                  color: _stickyStatsOpen
+                                      ? const Color(0xFFCFE4F6)
+                                      : AppColors.line,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                minimumSize: const Size(0, 34),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    'Stats',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  AnimatedRotation(
+                                    turns: _stickyStatsOpen ? 0.5 : 0,
+                                    duration: const Duration(milliseconds: 200),
+                                    child: const Icon(
+                                      Icons.expand_more,
+                                      size: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-              ],
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 280),
+                        curve: const Cubic(0.22, 1, 0.36, 1),
+                        alignment: Alignment.topCenter,
+                        child: _stickyStatsOpen
+                            ? Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Divider(
+                                    height: 1,
+                                    color: AppColors.line,
+                                  ),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _StickyKpiChip(
+                                          label: 'Inflow',
+                                          value: money(inflow),
+                                          color: const Color(0xFF0D9488),
+                                          onTap: () => _openCashflowDetail(
+                                            filtered,
+                                            _CashMetric.inflow,
+                                          ),
+                                        ),
+                                      ),
+                                      Container(
+                                        width: 1,
+                                        height: 44,
+                                        color: AppColors.line,
+                                      ),
+                                      Expanded(
+                                        child: _StickyKpiChip(
+                                          label: 'Outflow',
+                                          value: money(outflow),
+                                          color: const Color(0xFFE11D48),
+                                          onTap: () => _openCashflowDetail(
+                                            filtered,
+                                            _CashMetric.outflow,
+                                          ),
+                                        ),
+                                      ),
+                                      Container(
+                                        width: 1,
+                                        height: 44,
+                                        color: AppColors.line,
+                                      ),
+                                      Expanded(
+                                        child: _StickyKpiChip(
+                                          label: 'Net',
+                                          value: money(net, signed: true),
+                                          color: const Color(0xFF635BFF),
+                                          onTap: () => _openCashflowDetail(
+                                            filtered,
+                                            _CashMetric.net,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ),
+                ),
+                ),
+              ),
             ),
           ),
         ),
-        ],
       ],
+    );
+  }
+}
+
+class _StickyKpiChip extends StatelessWidget {
+  const _StickyKpiChip({
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.mute,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.02,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
