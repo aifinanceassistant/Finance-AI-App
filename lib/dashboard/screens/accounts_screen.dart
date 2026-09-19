@@ -96,6 +96,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
     final last4Ctrl = TextEditingController();
     final balanceCtrl = TextEditingController(text: '0');
     var type = _accountTypes.first;
+    var currency = DisplayCurrency.code;
 
     await showDashSheet<void>(
       context: context,
@@ -135,11 +136,28 @@ class _AccountsScreenState extends State<AccountsScreen> {
             ),
             const SizedBox(height: 14),
             const DashFieldLabel('Starting balance'),
-            DashTextField(
-              controller: balanceCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
+            Row(
+              children: [
+                Expanded(
+                  child: DashTextField(
+                    controller: balanceCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 96,
+                  child: DashDropdown<String>(
+                    value: currency,
+                    items: kSupportedCurrencies,
+                    labelOf: (c) => c,
+                    onChanged: (v) => setSheetState(() => currency = v),
+                  ),
+                ),
               ],
             ),
           ],
@@ -171,6 +189,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 type: type,
                 lastFour: last4,
                 balance: double.tryParse(balanceCtrl.text) ?? 0,
+                defaultCurrency: currency,
               );
               if (!mounted) return;
               if (created == null) {
@@ -199,12 +218,16 @@ class _AccountsScreenState extends State<AccountsScreen> {
           : account.name!.trim(),
     );
     final last4Ctrl = TextEditingController(text: account.digits);
+    final nativeBal = (account.originalBalance ?? account.balance).abs();
     final balanceCtrl = TextEditingController(
-      text: account.balance.abs().toStringAsFixed(2),
+      text: nativeBal.toStringAsFixed(2),
     );
     var type = _accountTypes.contains(account.type)
         ? account.type
         : _accountTypes.first;
+    var currency = kSupportedCurrencies.contains(account.nativeCurrency)
+        ? account.nativeCurrency
+        : DisplayCurrency.code;
 
     await showDashSheet<void>(
       context: context,
@@ -244,12 +267,29 @@ class _AccountsScreenState extends State<AccountsScreen> {
             ),
             const SizedBox(height: 14),
             const DashFieldLabel('Balance'),
-            DashTextField(
-              controller: balanceCtrl,
-              hint: '0.00',
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+            Row(
+              children: [
+                Expanded(
+                  child: DashTextField(
+                    controller: balanceCtrl,
+                    hint: '0.00',
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 96,
+                  child: DashDropdown<String>(
+                    value: currency,
+                    items: kSupportedCurrencies,
+                    labelOf: (c) => c,
+                    onChanged: (v) => setSheetState(() => currency = v),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 18),
@@ -273,6 +313,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   type: type,
                   lastFour: last4,
                   balance: double.tryParse(balanceCtrl.text) ?? 0,
+                  defaultCurrency: currency,
                 );
                 if (!ctx.mounted) return;
                 Navigator.pop(ctx);
@@ -505,9 +546,12 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             ),
                           ),
                           Text(
-                            money(a.balance),
+                            moneyNative(
+                              a.originalBalance ?? a.balance,
+                              a.nativeCurrency,
+                            ),
                             style: TextStyle(
-                              color: a.balance < 0
+                              color: (a.originalBalance ?? a.balance) < 0
                                   ? AppColors.danger
                                   : AppColors.ink,
                               fontSize: 16,

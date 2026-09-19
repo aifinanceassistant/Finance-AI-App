@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../auth/auth_controller.dart';
 import 'data.dart';
+import 'fx_prefetch.dart';
 
 class AccountsController extends ChangeNotifier {
   AccountsController(this._auth);
@@ -56,7 +57,16 @@ class AccountsController extends ChangeNotifier {
         : (digits.isEmpty ? '—' : digits);
     final type = (json['type'] as String?) ?? 'Checking';
     final balance = (json['balance'] as num?)?.toDouble() ?? 0;
+    final originalBalance = (json['originalBalance'] as num?)?.toDouble();
+    final originalCurrencyRaw =
+        (json['originalCurrency'] as String?)?.trim().toUpperCase();
+    final defaultCurrencyRaw =
+        (json['defaultCurrency'] as String?)?.trim().toUpperCase();
     final connected = json['connected'] == true;
+    final signedUsd = type == 'Credit' ? -balance.abs() : balance;
+    final signedOriginal = originalBalance == null
+        ? null
+        : (type == 'Credit' ? -originalBalance.abs() : originalBalance);
     return DemoAccount(
       id: json['id'] as String?,
       bank: institution.isEmpty ? name : institution,
@@ -64,7 +74,16 @@ class AccountsController extends ChangeNotifier {
       type: type,
       number: '····$suffix',
       lastFour: suffix == '—' ? null : suffix,
-      balance: type == 'Credit' ? -balance.abs() : balance,
+      balance: signedUsd,
+      originalBalance: signedOriginal,
+      originalCurrency:
+          originalCurrencyRaw != null && originalCurrencyRaw.isNotEmpty
+              ? originalCurrencyRaw
+              : null,
+      defaultCurrency:
+          defaultCurrencyRaw != null && defaultCurrencyRaw.isNotEmpty
+              ? defaultCurrencyRaw
+              : null,
       status: connected ? TxnStatus.succeeded : TxnStatus.failed,
       synced: _syncLabel(json['lastSyncedAt'] as String?),
     );
@@ -97,6 +116,10 @@ class AccountsController extends ChangeNotifier {
         }
       }
       _accounts = list;
+      await prefetchFxRates(
+        _auth,
+        list.expand((a) => [a.originalCurrency, a.defaultCurrency]),
+      );
     } catch (e) {
       debugPrint('AccountsController.load: $e');
       _accounts = [];
@@ -110,9 +133,11 @@ class AccountsController extends ChangeNotifier {
     required String type,
     required String lastFour,
     required double balance,
+    String? defaultCurrency,
   }) async {
     if (_spaceId.isEmpty) return null;
     final nickname = (name ?? '').trim().isEmpty ? institution : name!.trim();
+    final code = (defaultCurrency ?? DisplayCurrency.code).toUpperCase();
 
     if (_auth.isFake) {
       final account = DemoAccount(
@@ -122,7 +147,10 @@ class AccountsController extends ChangeNotifier {
         type: type,
         number: '····$lastFour',
         lastFour: lastFour,
-        balance: balance,
+        balance: type == 'Credit' ? -balance.abs() : balance,
+        originalBalance: type == 'Credit' ? -balance.abs() : balance,
+        originalCurrency: code,
+        defaultCurrency: code,
         status: TxnStatus.succeeded,
         synced: 'Just now',
       );
@@ -142,6 +170,7 @@ class AccountsController extends ChangeNotifier {
         'balance': balance.abs(),
         'lastFour': lastFour,
         'connected': true,
+        'defaultCurrency': code,
       },
     );
     if (decoded is! Map<String, dynamic>) return null;
@@ -285,10 +314,12 @@ class AccountsController extends ChangeNotifier {
     required String type,
     required String lastFour,
     required double balance,
+    String? defaultCurrency,
   }) async {
     final target = _findByKey(key);
     if (target == null) return null;
     final nickname = (name ?? '').trim().isEmpty ? institution : name!.trim();
+    final code = (defaultCurrency ?? target.nativeCurrency).toUpperCase();
 
     if (_auth.isFake || target.id == null) {
       final updated = target.copyWith(
@@ -298,6 +329,9 @@ class AccountsController extends ChangeNotifier {
         number: '····$lastFour',
         lastFour: lastFour,
         balance: type == 'Credit' ? -balance.abs() : balance.abs(),
+        originalBalance: type == 'Credit' ? -balance.abs() : balance.abs(),
+        originalCurrency: code,
+        defaultCurrency: code,
       );
       _accounts = [
         for (final a in _accounts)
@@ -316,6 +350,7 @@ class AccountsController extends ChangeNotifier {
         'type': type,
         'lastFour': lastFour,
         'balance': balance.abs(),
+        'defaultCurrency': code,
       },
     );
     if (decoded is! Map<String, dynamic>) return null;

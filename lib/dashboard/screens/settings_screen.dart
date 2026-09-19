@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../auth/auth_controller.dart';
 import '../../auth/auth_scope.dart';
 import '../../billing/stripe_billing.dart';
 import '../../onboarding/onboarding_flow.dart';
@@ -25,7 +26,19 @@ const _sections = [
   ('about', 'About'),
 ];
 
-const _currencies = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'INR'];
+const _currencies = [
+  'USD',
+  'CAD',
+  'EUR',
+  'GBP',
+  'AED',
+  'SGD',
+  'JPY',
+  'INR',
+  'MYR',
+  'AUD',
+  'CHF',
+];
 
 const _invoices = [
   ('inv_1042', 'Mar 2026 · Plus Family', r'$14.99'),
@@ -122,8 +135,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (email != null && email.isNotEmpty) _emailCtrl.text = email;
       if (data['phone'] is String) _phoneCtrl.text = data['phone'] as String;
       final currency = (data['currency'] as String?)?.trim();
-      if (currency != null && currency.isNotEmpty) _currency = currency;
+      if (currency != null && currency.isNotEmpty) {
+        _currency = currency;
+        DisplayCurrency.setCode(currency);
+      }
     });
+    await _refreshFxRate(AuthScope.read(context), _currency);
+  }
+
+  Future<void> _refreshFxRate(AuthController auth, String currency) async {
+    final code = currency.trim().toUpperCase();
+    if (code.isEmpty || code == 'USD') return;
+    final data = await auth.apiDecode(
+      'GET',
+      '/api/currency/rate?from=${Uri.encodeQueryComponent(code)}',
+    );
+    if (data is! Map<String, dynamic>) return;
+    final rate = (data['rate'] as num?)?.toDouble();
+    if (rate == null || !rate.isFinite || rate <= 0) return;
+    DisplayCurrency.setRateToUsd(code, rate);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _setDisplayCurrency(String value) async {
+    setState(() => _currency = value);
+    DisplayCurrency.setCode(value);
+    final auth = AuthScope.read(context);
+    await auth.apiDecode(
+      'PATCH',
+      '/api/profile',
+      body: {'currency': value},
+    );
+    await _refreshFxRate(auth, value);
   }
 
   Future<void> _setRecurringAutoApply(bool value) async {
@@ -428,7 +471,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         DashDropdown<String>(
           value: _currency,
           items: _currencies,
-          onChanged: (v) => setState(() => _currency = v),
+          onChanged: (v) => _setDisplayCurrency(v),
           labelOf: (c) => c,
         ),
         const SizedBox(height: 16),

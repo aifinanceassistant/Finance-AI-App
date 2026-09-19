@@ -51,6 +51,8 @@ class DemoTxn {
     required this.status,
     this.approvalStatus = ApprovalStatus.approved,
     this.dateIso,
+    this.originalAmount,
+    this.originalCurrency,
     MoneyMove? type,
   }) : type = type ?? inferMoneyMove(amount, category, merchant);
 
@@ -58,6 +60,7 @@ class DemoTxn {
   final String merchant;
   final String category;
   final String account;
+  /// USD-normalized signed amount.
   final double amount;
   final String date;
   /// ISO YYYY-MM-DD when loaded from API (for charts / sorting).
@@ -65,6 +68,8 @@ class DemoTxn {
   final TxnStatus status;
   final ApprovalStatus approvalStatus;
   final MoneyMove type;
+  final double? originalAmount;
+  final String? originalCurrency;
 
   DemoTxn copyWith({
     String? id,
@@ -77,6 +82,8 @@ class DemoTxn {
     TxnStatus? status,
     ApprovalStatus? approvalStatus,
     MoneyMove? type,
+    double? originalAmount,
+    String? originalCurrency,
   }) {
     return DemoTxn(
       id: id ?? this.id,
@@ -89,6 +96,8 @@ class DemoTxn {
       status: status ?? this.status,
       approvalStatus: approvalStatus ?? this.approvalStatus,
       type: type ?? this.type,
+      originalAmount: originalAmount ?? this.originalAmount,
+      originalCurrency: originalCurrency ?? this.originalCurrency,
     );
   }
 }
@@ -102,6 +111,9 @@ class DemoAccount {
     required this.number,
     this.lastFour,
     required this.balance,
+    this.originalBalance,
+    this.originalCurrency,
+    this.defaultCurrency,
     required this.status,
     required this.synced,
   });
@@ -114,7 +126,11 @@ class DemoAccount {
   final String number;
   /// Digits for reveal; derived from [number] when null.
   final String? lastFour;
+  /// USD-normalized balance.
   final double balance;
+  final double? originalBalance;
+  final String? originalCurrency;
+  final String? defaultCurrency;
   final TxnStatus status;
   final String synced;
 
@@ -123,6 +139,9 @@ class DemoAccount {
     if (n.isNotEmpty && n != bank) return n;
     return bank;
   }
+
+  String get nativeCurrency =>
+      (originalCurrency ?? defaultCurrency ?? 'USD').toUpperCase();
 
   String get digits {
     final fromFour = (lastFour ?? '').replaceAll(RegExp(r'\D'), '');
@@ -143,6 +162,9 @@ class DemoAccount {
     String? number,
     String? lastFour,
     double? balance,
+    double? originalBalance,
+    String? originalCurrency,
+    String? defaultCurrency,
     TxnStatus? status,
     String? synced,
   }) {
@@ -154,6 +176,9 @@ class DemoAccount {
       number: number ?? this.number,
       lastFour: lastFour ?? this.lastFour,
       balance: balance ?? this.balance,
+      originalBalance: originalBalance ?? this.originalBalance,
+      originalCurrency: originalCurrency ?? this.originalCurrency,
+      defaultCurrency: defaultCurrency ?? this.defaultCurrency,
       status: status ?? this.status,
       synced: synced ?? this.synced,
     );
@@ -166,36 +191,88 @@ class DemoGoal {
     required this.name,
     required this.target,
     required this.saved,
+    this.originalTarget,
+    this.originalCurrency,
     required this.due,
     required this.color,
     required this.note,
+    this.criteria = const GoalCriteria(),
   });
 
   final String? id;
   final String name;
+  /// USD-normalized target.
   final double target;
+  /// USD progress from API (live SUM of matching transactions).
   final double saved;
+  final double? originalTarget;
+  final String? originalCurrency;
   final String due;
   final Color color;
   final String note;
+  final GoalCriteria criteria;
 
   DemoGoal copyWith({
     String? id,
     String? name,
     double? target,
     double? saved,
+    double? originalTarget,
+    String? originalCurrency,
     String? due,
     Color? color,
     String? note,
+    GoalCriteria? criteria,
   }) {
     return DemoGoal(
       id: id ?? this.id,
       name: name ?? this.name,
       target: target ?? this.target,
       saved: saved ?? this.saved,
+      originalTarget: originalTarget ?? this.originalTarget,
+      originalCurrency: originalCurrency ?? this.originalCurrency,
       due: due ?? this.due,
       color: color ?? this.color,
       note: note ?? this.note,
+      criteria: criteria ?? this.criteria,
+    );
+  }
+}
+
+class GoalCriteria {
+  const GoalCriteria({
+    this.categoryIds = const [],
+    this.accountIds = const [],
+    this.types = const [],
+  });
+
+  final List<String> categoryIds;
+  final List<String> accountIds;
+  final List<String> types;
+
+  Map<String, dynamic> toJson() => {
+        'categoryIds': categoryIds,
+        'accountIds': accountIds,
+        'types': types,
+      };
+
+  static GoalCriteria fromJson(dynamic raw) {
+    if (raw is! Map) return const GoalCriteria();
+    List<String> list(dynamic v) {
+      if (v is! List) return const [];
+      return [
+        for (final item in v)
+          if (item is String && item.trim().isNotEmpty) item.trim(),
+      ];
+    }
+
+    return GoalCriteria(
+      categoryIds: list(raw['categoryIds'] ?? raw['category_ids']),
+      accountIds: list(raw['accountIds'] ?? raw['account_ids']),
+      types: [
+        for (final t in list(raw['types']))
+          if (t == 'income' || t == 'expense') t,
+      ],
     );
   }
 }
@@ -209,15 +286,21 @@ class DemoHolding {
     required this.value,
     required this.cost,
     required this.change,
+    this.currency,
+    this.originalPrice,
   });
 
   final String? id;
   final String name;
   final String ticker;
   final String type;
+  /// USD market value.
   final double value;
+  /// USD cost basis.
   final double cost;
   final double change;
+  final String? currency;
+  final double? originalPrice;
 
   DemoHolding copyWith({
     String? id,
@@ -227,6 +310,8 @@ class DemoHolding {
     double? value,
     double? cost,
     double? change,
+    String? currency,
+    double? originalPrice,
   }) {
     return DemoHolding(
       id: id ?? this.id,
@@ -236,6 +321,8 @@ class DemoHolding {
       value: value ?? this.value,
       cost: cost ?? this.cost,
       change: change ?? this.change,
+      currency: currency ?? this.currency,
+      originalPrice: originalPrice ?? this.originalPrice,
     );
   }
 }
@@ -252,12 +339,15 @@ class DemoRecurring {
     this.end = '',
     required this.account,
     this.status = TxnStatus.succeeded,
+    this.originalAmount,
+    this.originalCurrency,
     MoneyMove? type,
   }) : type = type ?? inferMoneyMove(amount, category, name);
 
   final String id;
   final String name;
   final String category;
+  /// USD-normalized signed amount.
   final double amount;
   final String cadence;
   final String next;
@@ -267,6 +357,8 @@ class DemoRecurring {
   final String account;
   final TxnStatus status;
   final MoneyMove type;
+  final double? originalAmount;
+  final String? originalCurrency;
 
   String get endLabel => end.trim().isEmpty ? 'Ongoing' : end;
 
@@ -282,6 +374,8 @@ class DemoRecurring {
     String? account,
     TxnStatus? status,
     MoneyMove? type,
+    double? originalAmount,
+    String? originalCurrency,
   }) {
     return DemoRecurring(
       id: id ?? this.id,
@@ -295,6 +389,8 @@ class DemoRecurring {
       account: account ?? this.account,
       status: status ?? this.status,
       type: type ?? this.type,
+      originalAmount: originalAmount ?? this.originalAmount,
+      originalCurrency: originalCurrency ?? this.originalCurrency,
     );
   }
 }
@@ -1320,21 +1416,218 @@ final demoRecurring = [
   ),
 ];
 
-String money(num n, {bool signed = false}) {
+const kSupportedCurrencies = [
+  'USD',
+  'CAD',
+  'EUR',
+  'GBP',
+  'AED',
+  'SGD',
+  'JPY',
+  'INR',
+  'MYR',
+  'AUD',
+  'CHF',
+];
+
+String money(num n, {bool signed = false, String? currency}) {
+  final code = (currency ?? DisplayCurrency.code).toUpperCase();
+  final converted = DisplayCurrency.convertFromUsd(n.toDouble(), code);
+  final symbol = DisplayCurrency.symbolFor(code);
+  final abs = converted.abs().toStringAsFixed(2).replaceAllMapped(
+        RegExp(r'(\d)(?=(\d{3})+\.)'),
+        (m) => '${m[1]},',
+      );
+  if (signed || converted < 0) {
+    return converted < 0 ? '-$symbol$abs' : '+$symbol$abs';
+  }
+  return '$symbol$abs';
+}
+
+String moneyWhole(num n, {String? currency}) {
+  final code = (currency ?? DisplayCurrency.code).toUpperCase();
+  final converted = DisplayCurrency.convertFromUsd(n.toDouble(), code);
+  final symbol = DisplayCurrency.symbolFor(code);
+  final abs = converted.abs().round().toString().replaceAllMapped(
+        RegExp(r'(\d)(?=(\d{3})+$)'),
+        (m) => '${m[1]},',
+      );
+  return converted < 0 ? '-$symbol$abs' : '$symbol$abs';
+}
+
+/// Format an amount that is already in [currency] (no FX).
+String moneyNative(num n, String currency, {bool signed = false}) {
+  final code = currency.trim().toUpperCase();
+  final symbol = DisplayCurrency.symbolFor(code);
   final abs = n.abs().toStringAsFixed(2).replaceAllMapped(
         RegExp(r'(\d)(?=(\d{3})+\.)'),
         (m) => '${m[1]},',
       );
   if (signed || n < 0) {
-    return n < 0 ? '-\$$abs' : '+\$$abs';
+    return n < 0 ? '-$symbol$abs' : '+$symbol$abs';
   }
-  return '\$$abs';
+  return '$symbol$abs';
 }
 
-String moneyWhole(num n) {
-  final abs = n.abs().round().toString().replaceAllMapped(
-        RegExp(r'(\d)(?=(\d{3})+$)'),
-        (m) => '${m[1]},',
-      );
-  return n < 0 ? '-\$$abs' : '\$$abs';
+/// Format original → display currency (primary). Falls back to USD→display.
+String moneyFromOriginal(
+  num originalAmount, {
+  String? originalCurrency,
+  bool signed = false,
+}) {
+  final from = (originalCurrency ?? 'USD').toUpperCase();
+  final converted = DisplayCurrency.convertViaUsd(
+    originalAmount.toDouble().abs(),
+    from,
+    DisplayCurrency.code,
+  );
+  final signedAmt = signed || originalAmount < 0
+      ? (originalAmount < 0 ? -converted : converted)
+      : converted;
+  return moneyNative(
+    signedAmt,
+    DisplayCurrency.code,
+    signed: signed || originalAmount < 0,
+  );
+}
+
+/// Profile display currency + live FX rates for [money] formatting.
+/// API amounts are USD-normalized; [convertFromUsd] applies the display rate.
+class DisplayCurrency {
+  DisplayCurrency._();
+
+  static String _code = 'USD';
+  static final Map<String, double> _ratesToUsd = {'USD': 1};
+
+  static String get code => _code;
+
+  static void setCode(String code) {
+    final next = code.trim().toUpperCase();
+    if (next.isEmpty) return;
+    _code = next;
+  }
+
+  static void setRateToUsd(String code, double rate) {
+    final c = code.trim().toUpperCase();
+    if (c.isEmpty || !rate.isFinite || rate <= 0) return;
+    _ratesToUsd[c] = rate;
+  }
+
+  /// USD → display currency using cached rates (identity if rate missing).
+  static double convertFromUsd(double amountUsd, [String? toCurrency]) {
+    final to = (toCurrency ?? _code).toUpperCase();
+    if (to == 'USD') return amountUsd;
+    final rate = _ratesToUsd[to];
+    if (rate == null || !rate.isFinite || rate <= 0) return amountUsd;
+    return (amountUsd / rate * 100).round() / 100;
+  }
+
+  /// Cross-rate via USD (rates are USD-per-unit).
+  static double convertViaUsd(
+    double amount,
+    String fromCurrency,
+    String toCurrency,
+  ) {
+    final from = fromCurrency.trim().toUpperCase();
+    final to = toCurrency.trim().toUpperCase();
+    if (from == to) return amount;
+    final fromRate = from == 'USD' ? 1.0 : _ratesToUsd[from];
+    final toRate = to == 'USD' ? 1.0 : _ratesToUsd[to];
+    if (fromRate == null ||
+        toRate == null ||
+        !fromRate.isFinite ||
+        !toRate.isFinite ||
+        fromRate <= 0 ||
+        toRate <= 0) {
+      return amount;
+    }
+    return (amount * fromRate / toRate * 100).round() / 100;
+  }
+
+  static String symbolFor(String code) {
+    switch (code.toUpperCase()) {
+      case 'EUR':
+        return '€';
+      case 'GBP':
+        return '£';
+      case 'CAD':
+        return 'C\$';
+      case 'AUD':
+        return 'A\$';
+      case 'INR':
+        return '₹';
+      case 'JPY':
+        return '¥';
+      case 'SGD':
+        return 'S\$';
+      case 'CHF':
+        return 'CHF ';
+      case 'AED':
+        return 'د.إ';
+      case 'MYR':
+        return 'RM';
+      case 'USD':
+      default:
+        return '\$';
+    }
+  }
+}
+
+/// Dual-line amount like web [ConvertedAmountDisplay].
+class ConvertedAmountText extends StatelessWidget {
+  const ConvertedAmountText({
+    super.key,
+    required this.amount,
+    this.originalCurrency = 'USD',
+    this.signed = false,
+    this.isIncome = false,
+    this.primaryStyle,
+    this.secondaryStyle,
+    this.textAlign = TextAlign.right,
+  });
+
+  /// Amount in [originalCurrency] (absolute for expenses unless [signed]).
+  final double amount;
+  final String originalCurrency;
+  final bool signed;
+  final bool isIncome;
+  final TextStyle? primaryStyle;
+  final TextStyle? secondaryStyle;
+  final TextAlign textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    final from = originalCurrency.trim().toUpperCase();
+    final display = DisplayCurrency.code;
+    final primary = moneyFromOriginal(
+      isIncome ? amount.abs() : amount,
+      originalCurrency: from,
+      signed: signed || isIncome,
+    );
+    final showOriginal = from != display;
+    return Column(
+      crossAxisAlignment: textAlign == TextAlign.left
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          primary,
+          style: primaryStyle,
+          textAlign: textAlign,
+        ),
+        if (showOriginal)
+          Text(
+            moneyNative(amount.abs(), from),
+            style: secondaryStyle ??
+                const TextStyle(
+                  color: Color(0xFF8898AA),
+                  fontSize: 11,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+            textAlign: textAlign,
+          ),
+      ],
+    );
+  }
 }

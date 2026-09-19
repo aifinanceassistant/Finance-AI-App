@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_env.dart';
+import '../dashboard/data.dart' show DisplayCurrency;
 
 enum AuthDestination { landing, onboarding, dashboard, resetPassword }
 
@@ -16,12 +17,14 @@ class AuthUser {
     required this.email,
     this.name,
     this.onboardingCompleted = false,
+    this.currency = 'USD',
   });
 
   final String id;
   final String email;
   final String? name;
   final bool onboardingCompleted;
+  final String currency;
 }
 
 const _rememberKey = 'financeai_remember_me';
@@ -171,15 +174,38 @@ class AuthController extends ChangeNotifier {
     try {
       final data = await _apiJson('GET', '/api/profile');
       if (data == null) return base;
+      final currency =
+          ((data['currency'] as String?)?.trim().isNotEmpty ?? false)
+              ? (data['currency'] as String).trim().toUpperCase()
+              : 'USD';
+      DisplayCurrency.setCode(currency);
+      // ignore: discarded_futures
+      _refreshDisplayFx(currency);
       return AuthUser(
         id: base.id,
         email: (data['email'] as String?) ?? base.email,
         name: (data['full_name'] as String?) ?? base.name,
         onboardingCompleted: data['onboarding_completed_at'] != null,
+        currency: currency,
       );
     } catch (_) {
       return base;
     }
+  }
+
+  Future<void> _refreshDisplayFx(String currency) async {
+    final code = currency.trim().toUpperCase();
+    if (code.isEmpty || code == 'USD') return;
+    try {
+      final data = await _apiJson(
+        'GET',
+        '/api/currency/rate?from=${Uri.encodeQueryComponent(code)}',
+      );
+      final rate = (data?['rate'] as num?)?.toDouble();
+      if (rate == null || !rate.isFinite || rate <= 0) return;
+      DisplayCurrency.setRateToUsd(code, rate);
+      notifyListeners();
+    } catch (_) {}
   }
 
   Future<Map<String, dynamic>?> _apiJson(

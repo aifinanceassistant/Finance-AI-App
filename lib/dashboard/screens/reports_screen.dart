@@ -281,8 +281,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     spans: [
                       const TextSpan(text: 'Dining is '),
                       TextSpan(
-                        text: '\$30 over',
-                        style: TextStyle(
+                        text:
+                            '${DisplayCurrency.symbolFor(DisplayCurrency.code)}30 over',
+                        style: const TextStyle(
                           color: AppColors.ink,
                           fontWeight: FontWeight.w700,
                         ),
@@ -296,13 +297,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     spans: [
                       const TextSpan(text: 'Subscriptions are steady at '),
                       TextSpan(
-                        text: '\$89',
-                        style: TextStyle(
+                        text: moneyWhole(89),
+                        style: const TextStyle(
                           color: AppColors.ink,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const TextSpan(text: ', under your \$120 cap.'),
+                      TextSpan(
+                        text:
+                            ', under your ${moneyWhole(120)} cap.',
+                      ),
                     ],
                   ),
                   _Insight(

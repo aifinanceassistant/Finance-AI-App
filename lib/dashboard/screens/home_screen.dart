@@ -88,9 +88,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final style = widget.style;
     final goal = demoGoals.first;
     final progress = goal.saved / goal.target;
+    final sym = DisplayCurrency.symbolFor(DisplayCurrency.code);
     final actionItems = <(String, VoidCallback)>[
       (
-        'Move \$200 to emergency fund',
+        'Move ${sym}200 to emergency fund',
         widget.onViewGoals,
       ),
       ('Review dining budget overrun', widget.onViewTransactions),
@@ -99,20 +100,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final stories = <(String, String, IconData, VoidCallback)>[
       (
         'Cash position',
-        '\$12,480.22 across 5 accounts. Wise holds the largest share at \$5,519.',
+        '${sym}12,480.22 across 5 accounts. Wise holds the largest share at ${sym}5,519.',
         Icons.account_balance_wallet_outlined,
         widget.onViewAccounts,
       ),
       (
         'Spend so far',
-        '\$3,214 this month · 68% of budget with 12 days left.',
+        '${sym}3,214 this month · 68% of budget with 12 days left.',
         Icons.shopping_bag_outlined,
         widget.onViewTransactions,
       ),
       if (!_tipDismissed)
         (
           'Tip',
-          'Dining is \$30 over. Cutting two restaurant nights gets you back on track.',
+          'Dining is ${sym}30 over. Cutting two restaurant nights gets you back on track.',
           Icons.lightbulb_outline_rounded,
           () {
             setState(() => _tipDismissed = true);
@@ -123,8 +124,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     const homeMood = AlienMood.alert;
     final moodStyle = AlienMoodStyle.of(homeMood);
-    const homeDigest =
-        'Dining is \$30 over · Airbnb still pending review';
+    final homeDigest =
+        'Dining is ${sym}30 over · Airbnb still pending review';
 
     final searched =
         applySearch(_periodTxns, _search, _fields, _txnValue);
@@ -259,10 +260,10 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: DashPanel(
                   padding: const EdgeInsets.all(14),
-                  child: const Column(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'Cash left',
                         style: TextStyle(
                           color: AppColors.mute,
@@ -270,10 +271,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      SizedBox(height: 6),
+                      const SizedBox(height: 6),
                       Text(
-                        '\$1,485.92',
-                        style: TextStyle(
+                        money(1485.92),
+                        style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.4,
@@ -480,9 +481,12 @@ class _TightTxnRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            money(txn.amount, signed: true),
-            style: TextStyle(
+          ConvertedAmountText(
+            amount: (txn.originalAmount ?? txn.amount).abs(),
+            originalCurrency: txn.originalCurrency ?? 'USD',
+            signed: true,
+            isIncome: txn.amount > 0,
+            primaryStyle: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
               color: txn.amount > 0 ? AppColors.success : AppColors.ink,

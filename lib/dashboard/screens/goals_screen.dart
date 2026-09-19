@@ -73,7 +73,13 @@ class _GoalsScreenState extends State<GoalsScreen> {
     if (widget.openContributeOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        _openContributeSheet(goalName: widget.contributeGoalName);
+        final name = widget.contributeGoalName;
+        toast(
+          context,
+          name == null || name.isEmpty
+              ? 'Goal progress updates from matching transactions'
+              : '“$name” progress updates from matching transactions',
+        );
       });
     }
   }
@@ -94,6 +100,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
     final targetCtrl = TextEditingController(text: '1000');
     final dueCtrl = TextEditingController(text: 'Dec 2026');
     var color = _goalColors.first;
+    var currency = DisplayCurrency.code;
 
     await showDashSheet<void>(
       context: context,
@@ -116,41 +123,39 @@ class _GoalsScreenState extends State<GoalsScreen> {
               hint: 'What this is for',
             ),
             const SizedBox(height: 14),
+            const DashFieldLabel('Target'),
             Row(
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const DashFieldLabel('Target'),
-                      DashTextField(
-                        controller: targetCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'[0-9.]'),
-                          ),
-                        ],
+                  child: DashTextField(
+                    controller: targetCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'[0-9.]'),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const DashFieldLabel('Due'),
-                      DashTextField(
-                        controller: dueCtrl,
-                        hint: 'Dec 2026',
-                      ),
-                    ],
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 96,
+                  child: DashDropdown<String>(
+                    value: currency,
+                    items: kSupportedCurrencies,
+                    labelOf: (c) => c,
+                    onChanged: (v) => setSheetState(() => currency = v),
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 14),
+            const DashFieldLabel('Due'),
+            DashTextField(
+              controller: dueCtrl,
+              hint: 'Dec 2026',
             ),
             const SizedBox(height: 14),
             const DashFieldLabel('Color'),
@@ -210,6 +215,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                     ? 'TBD'
                     : dueCtrl.text.trim(),
                 color: color,
+                currency: currency,
               );
               if (!mounted) return;
               if (created == null) {
@@ -230,84 +236,27 @@ class _GoalsScreenState extends State<GoalsScreen> {
     dueCtrl.dispose();
   }
 
-  Future<void> _openContributeSheet({String? goalName}) async {
-    final amountCtrl = TextEditingController(text: '50');
-    var selected = goalName ?? _primary?.name ?? '';
-
-    await showDashSheet<void>(
-      context: context,
-      title: 'Add money',
-      description: 'Contribute to ${goalName ?? _primary?.name ?? 'a goal'}',
-      builder: (ctx, setSheetState) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (goalName == null && _goals.isNotEmpty) ...[
-              const DashFieldLabel('Goal'),
-              DashDropdown<String>(
-                value: selected.isEmpty ? _goals.first.name : selected,
-                items: _goals.map((g) => g.name).toList(),
-                labelOf: (v) => v,
-                onChanged: (v) => setSheetState(() => selected = v),
-              ),
-              const SizedBox(height: 14),
-            ],
-            const DashFieldLabel('Amount'),
-            DashTextField(
-              controller: amountCtrl,
-              autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-              ],
-            ),
-          ],
-        );
-      },
-      actions: [
-        Expanded(
-          child: GhostButton(
-            label: 'Cancel',
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
-        Expanded(
-          child: AccentButton(
-            label: 'Add',
-            onPressed: () async {
-              final value = double.tryParse(amountCtrl.text);
-              if (value == null || value <= 0) {
-                toast(context, 'Contribution must be greater than zero');
-                return;
-              }
-              final targetName = goalName ?? selected;
-              if (targetName.isEmpty) return;
-              final goal = _goals.where((g) => g.name == targetName).firstOrNull;
-              final id = goal?.id;
-              if (id == null || id.isEmpty) {
-                toast(context, 'Could not contribute');
-                return;
-              }
-              final updated = await _ctrl.contribute(id, value);
-              if (!mounted) return;
-              if (updated == null) {
-                toast(context, 'Could not contribute');
-                return;
-              }
-              Navigator.pop(context);
-              toast(
-                context,
-                'Contribution added · \$${value.toStringAsFixed(0)} → $targetName',
-              );
-            },
-          ),
-        ),
-      ],
+  Future<void> _openProgressInfo({String? goalName}) async {
+    final goal = goalName == null
+        ? null
+        : _goals.where((g) => g.name == goalName).firstOrNull;
+    final c = goal?.criteria;
+    final parts = <String>[];
+    if (c != null) {
+      if (c.types.isNotEmpty) parts.add(c.types.join(' + '));
+      if (c.categoryIds.isNotEmpty) {
+        parts.add('${c.categoryIds.length} categor${c.categoryIds.length == 1 ? 'y' : 'ies'}');
+      }
+      if (c.accountIds.isNotEmpty) {
+        parts.add('${c.accountIds.length} account${c.accountIds.length == 1 ? '' : 's'}');
+      }
+    }
+    toast(
+      context,
+      parts.isEmpty
+          ? 'Set category/account filters on this goal so progress can be calculated from transactions'
+          : 'Counting ${parts.join(' · ')}',
     );
-
-    amountCtrl.dispose();
   }
 
   Future<void> _openRulesSheet() async {
@@ -394,8 +343,8 @@ class _GoalsScreenState extends State<GoalsScreen> {
             subtitle: 'Save toward what matters',
             actions: [
               GhostButton(
-                label: 'Contribute',
-                onPressed: () => _openContributeSheet(),
+                label: 'How progress works',
+                onPressed: () => _openProgressInfo(),
               ),
               AccentButton(
                 label: 'New goal',
@@ -464,7 +413,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                 child: _GoalCard(
                   goal: g,
-                  onAddMoney: () => _openContributeSheet(goalName: g.name),
+                  onAddMoney: () => _openProgressInfo(goalName: g.name),
                 ),
               ),
           if (_goals.isNotEmpty)
@@ -489,7 +438,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                     if (_secondary != null)
                       _RuleRow(
                         label:
-                            '\$50 / paycheck → ${_secondary!.name}',
+                            '${DisplayCurrency.symbolFor(DisplayCurrency.code)}50 / paycheck → ${_secondary!.name}',
                         on: _roundupEnabled,
                       ),
                   ],
@@ -564,25 +513,44 @@ class _GoalCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          Text.rich(
-            TextSpan(
-              text: moneyWhole(goal.saved),
-              style: const TextStyle(
-                color: AppColors.ink,
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-              ),
-              children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text.rich(
                 TextSpan(
-                  text: ' / ${moneyWhole(goal.target)}',
+                  text: money(goal.saved),
+                  style: const TextStyle(
+                    color: AppColors.ink,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  children: [
+                    TextSpan(
+                      text:
+                          ' / ${moneyFromOriginal(goal.originalTarget ?? goal.target, originalCurrency: goal.originalCurrency ?? 'USD')}',
+                      style: const TextStyle(
+                        color: AppColors.softMute,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (goal.originalCurrency != null &&
+                  goal.originalCurrency!.toUpperCase() !=
+                      DisplayCurrency.code) ...[
+                const SizedBox(height: 2),
+                Text(
+                  'Target ${moneyNative(goal.originalTarget ?? goal.target, goal.originalCurrency!)}',
                   style: const TextStyle(
                     color: AppColors.softMute,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
               ],
-            ),
+            ],
           ),
           const SizedBox(height: 10),
           ProgressTrack(progress: pct / 100, color: goal.color),
@@ -598,7 +566,7 @@ class _GoalCard extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              LinkAction(label: 'Add money', onTap: onAddMoney),
+              LinkAction(label: 'Criteria', onTap: onAddMoney),
             ],
           ),
         ],

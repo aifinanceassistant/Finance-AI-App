@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../auth/auth_controller.dart';
 import 'data.dart';
+import 'fx_prefetch.dart';
 
 class InvestmentsController extends ChangeNotifier {
   InvestmentsController(this._auth);
@@ -25,6 +26,7 @@ class InvestmentsController extends ChangeNotifier {
   String get spaceId => _spaceId;
 
   static DemoHolding fromJson(Map<String, dynamic> json) {
+    final currencyRaw = (json['currency'] as String?)?.trim().toUpperCase();
     return DemoHolding(
       id: json['id'] as String?,
       name: (json['name'] as String?)?.trim() ?? 'Holding',
@@ -35,6 +37,8 @@ class InvestmentsController extends ChangeNotifier {
       value: (json['value'] as num?)?.toDouble() ?? 0,
       cost: (json['cost'] as num?)?.toDouble() ?? 0,
       change: (json['change'] as num?)?.toDouble() ?? 0,
+      currency: currencyRaw != null && currencyRaw.isNotEmpty ? currencyRaw : null,
+      originalPrice: (json['originalPrice'] as num?)?.toDouble(),
     );
   }
 
@@ -68,6 +72,7 @@ class InvestmentsController extends ChangeNotifier {
         }
       }
       _holdings = list;
+      await prefetchFxRates(_auth, list.map((h) => h.currency));
     } catch (e) {
       debugPrint('InvestmentsController.load: $e');
       _holdings = [];
@@ -82,8 +87,10 @@ class InvestmentsController extends ChangeNotifier {
     required String type,
     required double value,
     required double cost,
+    String? currency,
   }) async {
     if (_spaceId.isEmpty) return null;
+    final code = (currency ?? DisplayCurrency.code).toUpperCase();
 
     if (_auth.isFake) {
       final row = DemoHolding(
@@ -94,6 +101,8 @@ class InvestmentsController extends ChangeNotifier {
         value: value,
         cost: cost,
         change: 0,
+        currency: code,
+        originalPrice: value,
       );
       _holdings = [..._holdings, row];
       notifyListeners();
@@ -110,6 +119,7 @@ class InvestmentsController extends ChangeNotifier {
         'type': type,
         'value': value,
         'cost': cost,
+        'currency': code,
       },
     );
     if (decoded is! Map<String, dynamic>) return null;
@@ -126,17 +136,21 @@ class InvestmentsController extends ChangeNotifier {
     String? type,
     double? value,
     double? cost,
+    String? currency,
   }) async {
     if (_auth.isFake) {
       final idx = _holdings.indexWhere((h) => h.id == id);
       if (idx < 0) return null;
       final t = _holdings[idx];
+      final code = (currency ?? t.currency ?? DisplayCurrency.code).toUpperCase();
       final updated = t.copyWith(
         name: name ?? t.name,
         ticker: ticker ?? t.ticker,
         type: type ?? t.type,
         value: value ?? t.value,
         cost: cost ?? t.cost,
+        currency: code,
+        originalPrice: value ?? t.originalPrice,
       );
       _holdings = [..._holdings]..[idx] = updated;
       notifyListeners();
@@ -149,6 +163,7 @@ class InvestmentsController extends ChangeNotifier {
     if (type != null) body['type'] = type;
     if (value != null) body['value'] = value;
     if (cost != null) body['cost'] = cost;
+    if (currency != null) body['currency'] = currency.toUpperCase();
 
     final decoded = await _auth.apiDecode(
       'PATCH',

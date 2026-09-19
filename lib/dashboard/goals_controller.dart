@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../auth/auth_controller.dart';
 import '../theme/app_theme.dart';
 import 'data.dart';
+import 'fx_prefetch.dart';
 
 class GoalsController extends ChangeNotifier {
   GoalsController(this._auth);
@@ -41,14 +42,22 @@ class GoalsController extends ChangeNotifier {
   }
 
   static DemoGoal fromJson(Map<String, dynamic> json) {
+    final originalCurrencyRaw =
+        (json['originalCurrency'] as String?)?.trim().toUpperCase();
     return DemoGoal(
       id: json['id'] as String?,
       name: (json['name'] as String?)?.trim() ?? 'Goal',
       target: (json['target'] as num?)?.toDouble() ?? 0,
       saved: (json['saved'] as num?)?.toDouble() ?? 0,
+      originalTarget: (json['originalTarget'] as num?)?.toDouble(),
+      originalCurrency:
+          originalCurrencyRaw != null && originalCurrencyRaw.isNotEmpty
+              ? originalCurrencyRaw
+              : null,
       due: (json['due'] as String?)?.trim() ?? '',
       color: colorFromHex(json['color'] as String?),
       note: (json['note'] as String?)?.trim() ?? '',
+      criteria: GoalCriteria.fromJson(json['criteria']),
     );
   }
 
@@ -82,6 +91,7 @@ class GoalsController extends ChangeNotifier {
         }
       }
       _goals = list;
+      await prefetchFxRates(_auth, list.map((g) => g.originalCurrency));
     } catch (e) {
       debugPrint('GoalsController.load: $e');
       _goals = [];
@@ -96,8 +106,12 @@ class GoalsController extends ChangeNotifier {
     required double target,
     required String due,
     required Color color,
+    String? currency,
+    GoalCriteria? criteria,
   }) async {
     if (_spaceId.isEmpty) return null;
+    final code = (currency ?? DisplayCurrency.code).toUpperCase();
+    final crit = criteria ?? const GoalCriteria();
 
     if (_auth.isFake) {
       final row = DemoGoal(
@@ -106,8 +120,11 @@ class GoalsController extends ChangeNotifier {
         note: note,
         target: target,
         saved: 0,
+        originalTarget: target,
+        originalCurrency: code,
         due: due,
         color: color,
+        criteria: crit,
       );
       _goals = [..._goals, row];
       notifyListeners();
@@ -122,9 +139,10 @@ class GoalsController extends ChangeNotifier {
         'name': name,
         'note': note,
         'target': target,
-        'saved': 0,
         'due': due,
         'color': colorToHex(color),
+        'currency': code,
+        'criteria': crit.toJson(),
       },
     );
     if (decoded is! Map<String, dynamic>) return null;
@@ -134,52 +152,32 @@ class GoalsController extends ChangeNotifier {
     return row;
   }
 
-  Future<DemoGoal?> contribute(String id, double amount) async {
-    if (_auth.isFake) {
-      final idx = _goals.indexWhere((g) => g.id == id);
-      if (idx < 0) return null;
-      final t = _goals[idx];
-      final updated = t.copyWith(
-        saved: (t.saved + amount).clamp(0, t.target),
-      );
-      _goals = [..._goals]..[idx] = updated;
-      notifyListeners();
-      return updated;
-    }
-
-    final decoded = await _auth.apiDecode(
-      'PATCH',
-      '/api/goals/$id',
-      body: {'contribute': amount},
-    );
-    if (decoded is! Map<String, dynamic>) return null;
-    final row = fromJson(decoded);
-    _goals = [for (final g in _goals) if (g.id == id) row else g];
-    notifyListeners();
-    return row;
-  }
-
   Future<DemoGoal?> update(
     String id, {
     String? name,
     String? note,
     double? target,
-    double? saved,
     String? due,
     Color? color,
+    String? currency,
+    GoalCriteria? criteria,
   }) async {
     if (_auth.isFake) {
       final idx = _goals.indexWhere((g) => g.id == id);
       if (idx < 0) return null;
       final t = _goals[idx];
       final nextTarget = target ?? t.target;
+      final code = (currency ?? t.originalCurrency ?? DisplayCurrency.code)
+          .toUpperCase();
       final updated = t.copyWith(
         name: name ?? t.name,
         note: note ?? t.note,
         target: nextTarget,
-        saved: saved ?? t.saved.clamp(0, nextTarget),
+        originalTarget: nextTarget,
+        originalCurrency: code,
         due: due ?? t.due,
         color: color ?? t.color,
+        criteria: criteria ?? t.criteria,
       );
       _goals = [..._goals]..[idx] = updated;
       notifyListeners();
@@ -190,9 +188,10 @@ class GoalsController extends ChangeNotifier {
     if (name != null) body['name'] = name;
     if (note != null) body['note'] = note;
     if (target != null) body['target'] = target;
-    if (saved != null) body['saved'] = saved;
     if (due != null) body['due'] = due;
     if (color != null) body['color'] = colorToHex(color);
+    if (currency != null) body['currency'] = currency.toUpperCase();
+    if (criteria != null) body['criteria'] = criteria.toJson();
 
     final decoded = await _auth.apiDecode(
       'PATCH',

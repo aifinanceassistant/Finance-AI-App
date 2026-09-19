@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../auth/auth_controller.dart';
 import 'data.dart';
+import 'fx_prefetch.dart';
 
 class RecurringController extends ChangeNotifier {
   RecurringController(this._auth);
@@ -70,6 +71,9 @@ class RecurringController extends ChangeNotifier {
     final nextDate = json['nextDate'] as String? ?? '';
     final startDate = json['startDate'] as String?;
     final endDate = json['endDate'] as String?;
+    final originalAmount = (json['originalAmount'] as num?)?.toDouble();
+    final originalCurrencyRaw =
+        (json['originalCurrency'] as String?)?.trim().toUpperCase();
     return DemoRecurring(
       id: json['id'] as String? ?? '',
       name: name,
@@ -82,6 +86,11 @@ class RecurringController extends ChangeNotifier {
       end: endDate == null || endDate.isEmpty ? '' : _displayDate(endDate),
       status: _uiStatus(json['status'] as String?),
       type: _uiType(json['type'] as String?, amount, category, name),
+      originalAmount: originalAmount,
+      originalCurrency:
+          originalCurrencyRaw != null && originalCurrencyRaw.isNotEmpty
+              ? originalCurrencyRaw
+              : null,
     );
   }
 
@@ -116,6 +125,7 @@ class RecurringController extends ChangeNotifier {
         }
       }
       _items = list;
+      await prefetchFxRates(_auth, list.map((r) => r.originalCurrency));
     } catch (e) {
       debugPrint('RecurringController.load: $e');
       _items = [];
@@ -134,8 +144,10 @@ class RecurringController extends ChangeNotifier {
     required String start,
     required String end,
     required MoneyMove type,
+    String? currency,
   }) async {
     if (_spaceId.isEmpty) return null;
+    final code = (currency ?? DisplayCurrency.code).toUpperCase();
 
     if (_auth.isFake) {
       final row = DemoRecurring(
@@ -150,6 +162,8 @@ class RecurringController extends ChangeNotifier {
         end: end,
         status: TxnStatus.pending,
         type: type,
+        originalAmount: amount.abs(),
+        originalCurrency: code,
       );
       _items = [..._items, row];
       notifyListeners();
@@ -171,6 +185,7 @@ class RecurringController extends ChangeNotifier {
         'end': end,
         'type': _dbType(type),
         'status': 'Pending',
+        'currency': code,
       },
     );
     if (decoded is! Map<String, dynamic>) return null;
@@ -185,6 +200,7 @@ class RecurringController extends ChangeNotifier {
       final idx = _items.indexWhere((r) => r.id == id);
       if (idx < 0) return null;
       final t = _items[idx];
+      final currency = (body['currency'] as String?)?.toUpperCase();
       final updated = t.copyWith(
         name: body['name'] as String? ?? t.name,
         amount: (body['amount'] as num?)?.toDouble() ?? t.amount,
@@ -202,6 +218,9 @@ class RecurringController extends ChangeNotifier {
                     ? MoneyMove.transfer
                     : MoneyMove.expense)
             : t.type,
+        originalAmount: (body['amount'] as num?)?.toDouble().abs() ??
+            t.originalAmount,
+        originalCurrency: currency ?? t.originalCurrency,
       );
       _items = [..._items]..[idx] = updated;
       notifyListeners();

@@ -751,6 +751,21 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         }
       });
     }
+    final currency = (data['currency'] as String?)?.trim();
+    if (currency != null && currency.isNotEmpty) {
+      DisplayCurrency.setCode(currency);
+      final rateData = await auth.apiDecode(
+        'GET',
+        '/api/currency/rate?from=${Uri.encodeQueryComponent(currency)}',
+      );
+      if (rateData is Map<String, dynamic>) {
+        final rate = (rateData['rate'] as num?)?.toDouble();
+        if (rate != null && rate.isFinite && rate > 0) {
+          DisplayCurrency.setRateToUsd(currency, rate);
+        }
+      }
+      if (mounted) setState(() {});
+    }
   }
 
   @override
@@ -857,6 +872,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       for (final a in accounts) AccountsController.accountKey(a),
     ];
     var accountKey = accountKeys.isNotEmpty ? accountKeys.first : '';
+    var currency = DisplayCurrency.code;
     final dateCtrl = TextEditingController(
       text: DateTime.now().toIso8601String().substring(0, 10),
     );
@@ -884,13 +900,30 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             ),
             const SizedBox(height: 14),
             const DashFieldLabel('Amount'),
-            DashTextField(
-              controller: amountCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+            Row(
+              children: [
+                Expanded(
+                  child: DashTextField(
+                    controller: amountCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    ],
+                    hint: '0.00',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 96,
+                  child: DashDropdown<String>(
+                    value: currency,
+                    items: kSupportedCurrencies,
+                    labelOf: (c) => c,
+                    onChanged: (v) => setSheetState(() => currency = v),
+                  ),
+                ),
               ],
-              hint: '0.00',
             ),
             const SizedBox(height: 14),
             const DashFieldLabel('Type'),
@@ -966,6 +999,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   category: category,
                   type: type,
                   date: dateCtrl.text.trim(),
+                  currency: currency,
                 );
                 if (!ctx.mounted) return;
                 Navigator.pop(ctx);
@@ -1298,9 +1332,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
-                                    Text(
-                                      money(t.amount, signed: true),
-                                      style: TextStyle(
+                                    ConvertedAmountText(
+                                      amount: (t.originalAmount ?? t.amount)
+                                          .abs(),
+                                      originalCurrency:
+                                          t.originalCurrency ?? 'USD',
+                                      signed: true,
+                                      isIncome: t.amount > 0,
+                                      primaryStyle: TextStyle(
                                         color: t.amount > 0
                                             ? AppColors.success
                                             : AppColors.ink,
@@ -1697,9 +1736,13 @@ class _ReconcileInboxBodyState extends State<_ReconcileInboxBody> {
                               ],
                             ),
                           ),
-                          Text(
-                            money(t.amount, signed: true),
-                            style: _reconcileAmountStyle(t.amount, fontSize: 13),
+                          ConvertedAmountText(
+                            amount: (t.originalAmount ?? t.amount).abs(),
+                            originalCurrency: t.originalCurrency ?? 'USD',
+                            signed: true,
+                            isIncome: t.amount > 0,
+                            primaryStyle:
+                                _reconcileAmountStyle(t.amount, fontSize: 13),
                           ),
                         ],
                       ),
@@ -1740,9 +1783,14 @@ class _ReconcileInboxBodyState extends State<_ReconcileInboxBody> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  money(active.amount, signed: true),
-                  style: _reconcileAmountStyle(active.amount, fontSize: 28),
+                ConvertedAmountText(
+                  amount: (active.originalAmount ?? active.amount).abs(),
+                  originalCurrency: active.originalCurrency ?? 'USD',
+                  signed: true,
+                  isIncome: active.amount > 0,
+                  primaryStyle:
+                      _reconcileAmountStyle(active.amount, fontSize: 28),
+                  textAlign: TextAlign.left,
                 ),
                 const SizedBox(height: 16),
                 _ReconcileDetailGrid(active: active),

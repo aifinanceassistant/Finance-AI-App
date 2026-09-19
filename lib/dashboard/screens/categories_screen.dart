@@ -126,7 +126,7 @@ String _ruleHeadline(_CategoryRule r) {
   if (r.match == _RuleMatch.autoLabel) return 'Auto-label with AI';
   final label = _matchLabel(r.match);
   if (r.match == _RuleMatch.amountOver || r.match == _RuleMatch.amountUnder) {
-    return '$label €${r.value}';
+    return '$label ${DisplayCurrency.symbolFor(DisplayCurrency.code)}${r.value}';
   }
   return '$label “${r.value}”';
 }

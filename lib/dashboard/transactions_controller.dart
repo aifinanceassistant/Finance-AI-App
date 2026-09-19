@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../auth/auth_controller.dart';
 import 'data.dart';
+import 'fx_prefetch.dart';
 
 class TransactionsController extends ChangeNotifier {
   TransactionsController(this._auth);
@@ -109,6 +110,9 @@ class TransactionsController extends ChangeNotifier {
     final amount = (json['amount'] as num?)?.toDouble() ?? 0;
     final date = (json['date'] as String?) ?? '';
     final dateIso = date.length >= 10 ? date.substring(0, 10) : date;
+    final originalAmount = (json['originalAmount'] as num?)?.toDouble();
+    final originalCurrencyRaw =
+        (json['originalCurrency'] as String?)?.trim().toUpperCase();
     return DemoTxn(
       id: json['id'] as String? ?? '',
       merchant: merchant,
@@ -120,6 +124,11 @@ class TransactionsController extends ChangeNotifier {
       status: _uiStatus(json['status'] as String?),
       approvalStatus: _uiApproval(json['approvalStatus'] as String?),
       type: _uiType(json['type'] as String?, amount, category, merchant),
+      originalAmount: originalAmount,
+      originalCurrency:
+          originalCurrencyRaw != null && originalCurrencyRaw.isNotEmpty
+              ? originalCurrencyRaw
+              : null,
     );
   }
 
@@ -154,6 +163,10 @@ class TransactionsController extends ChangeNotifier {
         }
       }
       _txns = list;
+      await prefetchFxRates(
+        _auth,
+        list.map((t) => t.originalCurrency),
+      );
     } catch (e) {
       debugPrint('TransactionsController.load: $e');
       _txns = [];
@@ -216,7 +229,9 @@ class TransactionsController extends ChangeNotifier {
     required MoneyMove type,
     String? date,
     String? accountLabel,
+    String? currency,
   }) async {
+    final code = (currency ?? DisplayCurrency.code).toUpperCase();
     if (_auth.isFake) {
       final row = DemoTxn(
         id: 'txn_${DateTime.now().millisecondsSinceEpoch}',
@@ -230,6 +245,8 @@ class TransactionsController extends ChangeNotifier {
         status: TxnStatus.succeeded,
         approvalStatus: ApprovalStatus.pending,
         type: type,
+        originalAmount: amount.abs(),
+        originalCurrency: code,
       );
       _txns = [row, ..._txns];
       notifyListeners();
@@ -240,6 +257,8 @@ class TransactionsController extends ChangeNotifier {
       'portfolioId': _spaceId,
       'merchant': merchant,
       'amount': amount.abs(),
+      'originalAmount': amount.abs(),
+      'currency': code,
       'accountId': accountId,
       'category': category,
       'type': _dbType(type),

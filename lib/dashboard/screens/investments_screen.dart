@@ -117,6 +117,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
     final valueCtrl = TextEditingController(text: '1000');
     final costCtrl = TextEditingController(text: '1000');
     var type = _holdingTypes.first;
+    var currency = DisplayCurrency.code;
 
     await showDashSheet<void>(
       context: context,
@@ -163,6 +164,14 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 14),
+            const DashFieldLabel('Currency'),
+            DashDropdown<String>(
+              value: currency,
+              items: kSupportedCurrencies,
+              labelOf: (c) => c,
+              onChanged: (v) => setSheetState(() => currency = v),
             ),
             const SizedBox(height: 14),
             Row(
@@ -240,6 +249,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                 type: type,
                 value: v,
                 cost: c,
+                currency: currency,
               );
               if (!mounted) return;
               if (created == null) {
@@ -500,9 +510,10 @@ class _HoldingTile extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                money(holding.value),
-                style: const TextStyle(
+              ConvertedAmountText(
+                amount: (holding.originalPrice ?? holding.value).abs(),
+                originalCurrency: holding.currency ?? 'USD',
+                primaryStyle: const TextStyle(
                   color: AppColors.ink,
                   fontWeight: FontWeight.w800,
                   fontFeatures: [FontFeature.tabularFigures()],

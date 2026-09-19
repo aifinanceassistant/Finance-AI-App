@@ -198,6 +198,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
     final endCtrl = TextEditingController();
     var cadence = 'Monthly';
     var type = MoneyMove.expense;
+    var currency = DisplayCurrency.code;
 
     await showDashSheet<void>(
       context: context,
@@ -222,44 +223,42 @@ class _RecurringScreenState extends State<RecurringScreen> {
               onChanged: (v) => setSheetState(() => type = v),
             ),
             const SizedBox(height: 14),
+            const DashFieldLabel('Amount'),
             Row(
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const DashFieldLabel('Amount'),
-                      DashTextField(
-                        controller: amountCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                          signed: true,
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'[0-9.\-]'),
-                          ),
-                        ],
+                  child: DashTextField(
+                    controller: amountCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'[0-9.\-]'),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const DashFieldLabel('Cadence'),
-                      DashDropdown<String>(
-                        value: cadence,
-                        items: _cadences,
-                        labelOf: (v) => v,
-                        onChanged: (v) => setSheetState(() => cadence = v),
-                      ),
-                    ],
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 96,
+                  child: DashDropdown<String>(
+                    value: currency,
+                    items: kSupportedCurrencies,
+                    labelOf: (c) => c,
+                    onChanged: (v) => setSheetState(() => currency = v),
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 14),
+            const DashFieldLabel('Cadence'),
+            DashDropdown<String>(
+              value: cadence,
+              items: _cadences,
+              labelOf: (v) => v,
+              onChanged: (v) => setSheetState(() => cadence = v),
             ),
             const SizedBox(height: 14),
             Row(
@@ -359,6 +358,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
                     : startCtrl.text.trim(),
                 end: endCtrl.text.trim(),
                 type: type,
+                currency: currency,
               );
               if (!mounted) return;
               if (created == null) {
@@ -384,12 +384,19 @@ class _RecurringScreenState extends State<RecurringScreen> {
 
   Future<void> _openManageSheet(DemoRecurring item) async {
     final nameCtrl = TextEditingController(text: item.name);
-    final amountCtrl = TextEditingController(text: '${item.amount}');
+    final amountCtrl = TextEditingController(
+      text: '${item.originalAmount ?? item.amount}',
+    );
     final nextCtrl = TextEditingController(text: item.next);
     final startCtrl = TextEditingController(text: item.start);
     final endCtrl = TextEditingController(text: item.end);
     var cadence = item.cadence;
     var type = item.type;
+    var currency = kSupportedCurrencies.contains(
+          (item.originalCurrency ?? DisplayCurrency.code).toUpperCase(),
+        )
+        ? (item.originalCurrency ?? DisplayCurrency.code).toUpperCase()
+        : DisplayCurrency.code;
 
     await showDashSheet<void>(
       context: context,
@@ -410,44 +417,42 @@ class _RecurringScreenState extends State<RecurringScreen> {
               onChanged: (v) => setSheetState(() => type = v),
             ),
             const SizedBox(height: 14),
+            const DashFieldLabel('Amount'),
             Row(
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const DashFieldLabel('Amount'),
-                      DashTextField(
-                        controller: amountCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                          signed: true,
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'[0-9.\-]'),
-                          ),
-                        ],
+                  child: DashTextField(
+                    controller: amountCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'[0-9.\-]'),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const DashFieldLabel('Cadence'),
-                      DashDropdown<String>(
-                        value: cadence,
-                        items: _cadences,
-                        labelOf: (v) => v,
-                        onChanged: (v) => setSheetState(() => cadence = v),
-                      ),
-                    ],
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 96,
+                  child: DashDropdown<String>(
+                    value: currency,
+                    items: kSupportedCurrencies,
+                    labelOf: (c) => c,
+                    onChanged: (v) => setSheetState(() => currency = v),
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 14),
+            const DashFieldLabel('Cadence'),
+            DashDropdown<String>(
+              value: cadence,
+              items: _cadences,
+              labelOf: (v) => v,
+              onChanged: (v) => setSheetState(() => cadence = v),
             ),
             const SizedBox(height: 14),
             Row(
@@ -553,6 +558,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
                 'end': endCtrl.text.trim(),
                 'cadence': cadence,
                 'type': moneyMoveLabel(type),
+                'currency': currency,
               });
               if (!mounted) return;
               if (updated == null) {
@@ -652,9 +658,15 @@ class _RecurringScreenState extends State<RecurringScreen> {
                                 ],
                               ),
                             ),
-                            Text(
-                              money(entry.value[i].amount, signed: true),
-                              style: TextStyle(
+                            ConvertedAmountText(
+                              amount: (entry.value[i].originalAmount ??
+                                      entry.value[i].amount)
+                                  .abs(),
+                              originalCurrency:
+                                  entry.value[i].originalCurrency ?? 'USD',
+                              signed: true,
+                              isIncome: entry.value[i].amount > 0,
+                              primaryStyle: TextStyle(
                                 color: entry.value[i].amount > 0
                                     ? AppColors.success
                                     : AppColors.ink,
@@ -913,9 +925,12 @@ class _UpcomingTile extends StatelessWidget {
                   ],
                 ),
               ),
-              Text(
-                money(item.amount, signed: true),
-                style: TextStyle(
+              ConvertedAmountText(
+                amount: (item.originalAmount ?? item.amount).abs(),
+                originalCurrency: item.originalCurrency ?? 'USD',
+                signed: true,
+                isIncome: item.amount > 0,
+                primaryStyle: TextStyle(
                   color: item.amount > 0 ? AppColors.success : AppColors.ink,
                   fontWeight: FontWeight.w800,
                   fontFeatures: const [FontFeature.tabularFigures()],
@@ -996,9 +1011,12 @@ class _SeriesTile extends StatelessWidget {
                   ],
                 ),
               ),
-              Text(
-                money(item.amount, signed: true),
-                style: TextStyle(
+              ConvertedAmountText(
+                amount: (item.originalAmount ?? item.amount).abs(),
+                originalCurrency: item.originalCurrency ?? 'USD',
+                signed: true,
+                isIncome: item.amount > 0,
+                primaryStyle: TextStyle(
                   color: item.amount > 0 ? AppColors.success : AppColors.ink,
                   fontWeight: FontWeight.w800,
                   fontFeatures: const [FontFeature.tabularFigures()],
