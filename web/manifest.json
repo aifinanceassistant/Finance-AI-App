@@ -1,11 +1,11 @@
 {
-    "name": "financeai_app",
-    "short_name": "financeai_app",
+    "name": "FinanceAI",
+    "short_name": "FinanceAI",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#D6ECFA",
+    "theme_color": "#3b9ae0",
+    "description": "Budget, invest, and grow your net worth.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
