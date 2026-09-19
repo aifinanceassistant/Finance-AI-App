@@ -166,6 +166,34 @@ List<_CashBucket> _buildCashflowBuckets(
   return buckets;
 }
 
+int _cashflowAllMonthSpan(List<DemoTxn> txns) {
+  final end = DateTime(_todayLocal().year, _todayLocal().month, 1, 12);
+  DateTime? earliest;
+  for (final t in txns) {
+    final day = _parseDay(t.dateIso);
+    if (day == null) continue;
+    final m = DateTime(day.year, day.month, 1, 12);
+    if (earliest == null || m.isBefore(earliest)) earliest = m;
+  }
+  if (earliest == null) return 1;
+  return ((end.year - earliest.year) * 12 + (end.month - earliest.month) + 1)
+      .clamp(1, 1200);
+}
+
+bool _hasTxnsOlderThanTwoYears(List<DemoTxn> txns) {
+  final cutoff = DateTime(
+    _todayLocal().year,
+    _todayLocal().month - 24,
+    _todayLocal().day,
+    12,
+  );
+  for (final t in txns) {
+    final day = _parseDay(t.dateIso);
+    if (day != null && day.isBefore(cutoff)) return true;
+  }
+  return false;
+}
+
 int _currentMonthBucketIndex(List<_CashBucket> buckets) {
   if (buckets.isEmpty) return 0;
   final prefix = _monthKey(_todayLocal());
@@ -735,17 +763,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   void _onScroll() {
     if (!_foldingEnabled) return;
     if (!_scroll.hasClients) return;
-    if (_stickyInteract) {
-      if (!_stickyPinned) setState(() => _stickyPinned = true);
-      return;
-    }
+    // Scroll can only open fold mode — close is via the header X only.
+    if (_stickyPinned || _stickyInteract) return;
     final threshold = MediaQuery.sizeOf(context).height * 0.9;
-    final next = _scroll.offset >= threshold;
-    if (next == _stickyPinned) return;
-    setState(() {
-      _stickyPinned = next;
-      if (!next) _stickyStatsOpen = false;
-    });
+    if (_scroll.offset < threshold) return;
+    setState(() => _stickyPinned = true);
   }
 
   @override
@@ -1076,12 +1098,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   @override
   Widget build(BuildContext context) {
     final filtered = _filtered;
-    final inflow = filtered
-        .where((t) => t.amount > 0)
-        .fold<double>(0, (s, t) => s + t.amount);
-    final outflow = filtered
-        .where((t) => t.amount < 0)
-        .fold<double>(0, (s, t) => s + t.amount.abs());
+    final kpiMonths =
+        _defaultCashTimeframe(filtered).monthsFor(filtered);
+    final kpiBuckets =
+        _buildCashflowBuckets(filtered, months: kpiMonths);
+    final inflow =
+        kpiBuckets.fold<double>(0, (s, b) => s + b.inflow);
+    final outflow =
+        kpiBuckets.fold<double>(0, (s, b) => s + b.outflow);
     final net = inflow - outflow;
     final buckets = _buildCashflowBuckets(filtered);
     final categoryFilter = widget.categoryFilter?.trim();
@@ -1310,7 +1334,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           child: IgnorePointer(
             ignoring: !(_foldingEnabled && _stickyPinned),
             child: AnimatedSlide(
-              duration: const Duration(milliseconds: 300),
+              duration: const Duration(milliseconds: 780),
               curve: _foldingEnabled && _stickyPinned
                   ? const Cubic(0.22, 1, 0.36, 1)
                   : Curves.easeIn,
@@ -1318,7 +1342,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   ? Offset.zero
                   : const Offset(0, -1.1),
               child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 260),
+                duration: const Duration(milliseconds: 640),
                 opacity: _foldingEnabled && _stickyPinned ? 1 : 0,
                 child: Focus(
                   onFocusChange: (hasFocus) {
@@ -1419,6 +1443,31 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                     ),
                                   ),
                                 ],
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  _stickyPinned = false;
+                                  _stickyStatsOpen = false;
+                                  _stickyInteract = false;
+                                });
+                                if (_scroll.hasClients) {
+                                  _scroll.animateTo(
+                                    0,
+                                    duration: const Duration(milliseconds: 420),
+                                    curve: Curves.easeOutCubic,
+                                  );
+                                }
+                              },
+                              icon: const Icon(Icons.close, size: 18),
+                              color: AppColors.mute,
+                              tooltip: 'Close folded view',
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 34,
+                                minHeight: 34,
                               ),
                             ),
                           ],
@@ -1772,20 +1821,28 @@ class _ReconcileDetailCell extends StatelessWidget {
   }
 }
 
-enum _CashTimeframe { m6, y1, y2 }
+enum _CashTimeframe { m6, y1, y2, all }
 
 extension on _CashTimeframe {
   String get label => switch (this) {
-        _CashTimeframe.m6 => '6 months',
-        _CashTimeframe.y1 => '1 year',
-        _CashTimeframe.y2 => '2 years',
+        _CashTimeframe.m6 => 'Last 6 months',
+        _CashTimeframe.y1 => 'Last 1 year',
+        _CashTimeframe.y2 => 'Last 2 years',
+        _CashTimeframe.all => 'All years',
       };
-  int get months => switch (this) {
+
+  int monthsFor(List<DemoTxn> txns) => switch (this) {
         _CashTimeframe.m6 => 6,
         _CashTimeframe.y1 => 12,
         _CashTimeframe.y2 => 24,
+        // All years: if history fits in 2 years, match the 2y window exactly.
+        _CashTimeframe.all =>
+          _cashflowAllMonthSpan(txns) > 24 ? _cashflowAllMonthSpan(txns) : 24,
       };
 }
+
+_CashTimeframe _defaultCashTimeframe(List<DemoTxn> txns) =>
+    _hasTxnsOlderThanTwoYears(txns) ? _CashTimeframe.all : _CashTimeframe.y2;
 
 class _CashflowDetailPage extends StatefulWidget {
   const _CashflowDetailPage({
@@ -1805,12 +1862,14 @@ class _CashflowDetailPageState extends State<_CashflowDetailPage> {
   late _CashChartType _chartType = widget.initialMetric == _CashMetric.net
       ? _CashChartType.combined
       : _CashChartType.bars;
-  _CashTimeframe _timeframe = _CashTimeframe.y2;
+  late _CashTimeframe _timeframe = _defaultCashTimeframe(widget.txns);
   int? _active;
   late int _pinned;
 
-  List<_CashBucket> get _buckets =>
-      _buildCashflowBuckets(widget.txns, months: _timeframe.months);
+  List<_CashBucket> get _buckets => _buildCashflowBuckets(
+        widget.txns,
+        months: _timeframe.monthsFor(widget.txns),
+      );
 
   @override
   void initState() {
@@ -1944,7 +2003,7 @@ class _CashflowDetailPageState extends State<_CashflowDetailPage> {
                           _pinned = _currentMonthBucketIndex(
                             _buildCashflowBuckets(
                               widget.txns,
-                              months: v.months,
+                              months: v.monthsFor(widget.txns),
                             ),
                           );
                           _active = null;
