@@ -23,7 +23,14 @@ const _filterFields = [
   FilterFieldDef(id: 'synced', label: 'Last sync', type: FilterFieldType.date),
 ];
 
-const _accountTypes = ['Checking', 'Savings', 'Credit', 'Cash'];
+const _accountTypes = [
+  'Checking',
+  'Savings',
+  'Credit',
+  'Cash',
+  'IOU',
+  'Investment',
+];
 const _statusLabels = ['Linked', 'Manual', 'Needs reconnect', 'Pending'];
 
 String _accountStatusLabel(DemoAccount a) {
@@ -475,7 +482,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             DashDropdown<String>(
               value: type,
               items: _accountTypes,
-              labelOf: (v) => v,
+              labelOf: (v) => v == 'IOU' ? 'IOU (shared expenses)' : v,
               onChanged: (v) => setSheetState(() => type = v),
             ),
             const SizedBox(height: 14),
@@ -533,7 +540,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
               final trimmed = (institution ?? '').trim();
               final institutionErr = requiredText(trimmed, 'Institution');
               final lastFourErr = optionalLastFour(last4Ctrl.text);
-              final balanceErr = nonNegativeAmount(balanceCtrl.text, 'Balance');
+              final balanceErr = accountBalanceAmount(balanceCtrl.text, type);
               final errors = <String, String?>{
                 if (institutionErr != null) 'institution': institutionErr,
                 if (lastFourErr != null) 'lastFour': lastFourErr,
@@ -590,9 +597,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
           : account.name!.trim(),
     );
     final last4Ctrl = TextEditingController(text: account.digits);
-    final nativeBal = (account.originalBalance ?? account.balance).abs();
+    final nativeBal = account.originalBalance ?? account.balance;
     final balanceCtrl = TextEditingController(
-      text: nativeBal.toStringAsFixed(2),
+      text: type == 'Credit'
+          ? nativeBal.abs().toStringAsFixed(2)
+          : nativeBal.toStringAsFixed(2),
     );
     var type = _accountTypes.contains(account.type)
         ? account.type
@@ -628,7 +637,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             DashDropdown<String>(
               value: type,
               items: _accountTypes,
-              labelOf: (t) => t,
+              labelOf: (t) => t == 'IOU' ? 'IOU (shared expenses)' : t,
               onChanged: (v) => setSheetState(() => type = v),
             ),
             const SizedBox(height: 14),
@@ -675,7 +684,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 final trimmed = bankCtrl.text.trim();
                 final institutionErr = requiredText(trimmed, 'Institution');
                 final lastFourErr = optionalLastFour(last4Ctrl.text);
-                final balanceErr = nonNegativeAmount(balanceCtrl.text, 'Balance');
+                final balanceErr = accountBalanceAmount(balanceCtrl.text, type);
                 final errors = <String, String?>{
                   if (institutionErr != null) 'institution': institutionErr,
                   if (lastFourErr != null) 'lastFour': lastFourErr,

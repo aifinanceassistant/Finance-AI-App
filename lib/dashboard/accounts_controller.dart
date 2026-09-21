@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../auth/auth_controller.dart';
 import 'data.dart';
+import 'form_validation.dart';
 import 'fx_prefetch.dart';
 import '../providers/plaid_link_flow.dart';
 
@@ -152,8 +153,8 @@ class AccountsController extends ChangeNotifier {
         type: type,
         number: '····$lastFour',
         lastFour: lastFour,
-        balance: type == 'Credit' ? -balance.abs() : balance,
-        originalBalance: type == 'Credit' ? -balance.abs() : balance,
+        balance: signedAccountBalance(type, balance),
+        originalBalance: signedAccountBalance(type, balance),
         originalCurrency: code,
         defaultCurrency: code,
         status: TxnStatus.succeeded,
@@ -172,7 +173,7 @@ class AccountsController extends ChangeNotifier {
         'name': nickname,
         'institution': institution,
         'type': type,
-        'balance': balance.abs(),
+        'balance': apiAccountBalance(type, balance),
         'lastFour': lastFour,
         'connected': true,
         'defaultCurrency': code,
@@ -406,6 +407,7 @@ class AccountsController extends ChangeNotifier {
               'Wealthfront',
               'Coinbase',
               'Venmo',
+              'Splitwise',
               'Cash',
             ].where((n) => n.toLowerCase().contains(lower));
       return [
@@ -449,8 +451,8 @@ class AccountsController extends ChangeNotifier {
         type: type,
         number: '····$lastFour',
         lastFour: lastFour,
-        balance: type == 'Credit' ? -balance.abs() : balance.abs(),
-        originalBalance: type == 'Credit' ? -balance.abs() : balance.abs(),
+        balance: signedAccountBalance(type, balance),
+        originalBalance: signedAccountBalance(type, balance),
         originalCurrency: code,
         defaultCurrency: code,
       );
@@ -470,7 +472,7 @@ class AccountsController extends ChangeNotifier {
         'institution': institution,
         'type': type,
         'lastFour': lastFour,
-        'balance': balance.abs(),
+        'balance': apiAccountBalance(type, balance),
         'defaultCurrency': code,
       },
     );

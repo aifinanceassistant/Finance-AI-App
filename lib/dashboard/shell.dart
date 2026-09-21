@@ -317,8 +317,15 @@ class _DashboardShellState extends State<DashboardShell> {
             const DashFieldLabel('Account type'),
             DashDropdown<String>(
               value: type,
-              items: const ['Checking', 'Savings', 'Credit', 'Cash'],
-              labelOf: (v) => v,
+              items: const [
+                'Checking',
+                'Savings',
+                'Credit',
+                'Cash',
+                'IOU',
+                'Investment',
+              ],
+              labelOf: (v) => v == 'IOU' ? 'IOU (shared expenses)' : v,
               onChanged: (v) => setLocal(() => type = v),
             ),
             const SizedBox(height: 12),
@@ -343,7 +350,7 @@ class _DashboardShellState extends State<DashboardShell> {
                 final name = bank.text.trim();
                 final institutionErr = requiredText(name, 'Institution');
                 final lastFourErr = optionalLastFour(last4.text);
-                final balanceErr = nonNegativeAmount(balance.text, 'Balance');
+                final balanceErr = accountBalanceAmount(balance.text, type);
                 final errors = <String, String?>{
                   if (institutionErr != null) 'institution': institutionErr,
                   if (lastFourErr != null) 'lastFour': lastFourErr,

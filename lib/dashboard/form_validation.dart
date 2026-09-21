@@ -54,6 +54,36 @@ String? nonNegativeAmount(Object? value, [String label = 'Amount']) {
   return null;
 }
 
+/// Finite number (positive or negative). Empty / NaN fails.
+String? finiteAmount(Object? value, [String label = 'Amount']) {
+  final raw = (value?.toString() ?? '').trim();
+  if (raw.isEmpty && value is! num) return '$label is required.';
+  final n = value is num ? value.toDouble() : double.tryParse(raw);
+  if (n == null || !n.isFinite) {
+    return 'Enter a valid ${label.toLowerCase()}.';
+  }
+  return null;
+}
+
+/// Balance rules: IOU keeps sign; other types must be ≥ 0.
+String? accountBalanceAmount(Object? value, String type) {
+  if (type == 'IOU') return finiteAmount(value, 'Balance');
+  return nonNegativeAmount(value, 'Balance');
+}
+
+/// Signed balance for local/API storage.
+double signedAccountBalance(String type, double balance) {
+  if (type == 'Credit') return -balance.abs();
+  if (type == 'IOU') return balance;
+  return balance.abs();
+}
+
+/// Magnitude sent to API (Credit/Cash/etc. positive; IOU keeps sign).
+double apiAccountBalance(String type, double balance) {
+  if (type == 'IOU') return balance;
+  return balance.abs();
+}
+
 /// ISO date YYYY-MM-DD when provided.
 String? optionalIsoDate(String? value, [String label = 'Date']) {
   final v = (value ?? '').trim();
