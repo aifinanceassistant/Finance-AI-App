@@ -75,6 +75,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
   List<FilterRule> _filterRules = [];
   List<SortRule> _sortRules = [];
   String _search = '';
+  var _groupByInstitution = true;
 
   AccountsController get _ctrl => AccountsScope.of(context);
 
@@ -95,6 +96,28 @@ class _AccountsScreenState extends State<AccountsScreen> {
         applySearch(_accounts, _search, _filterFields, _accountValue);
     final filtered = applyFilters(searched, _filterRules, _accountValue);
     return applySort(filtered, _sortRules, _accountValue);
+  }
+
+  List<({String institution, List<DemoAccount> accounts, double total})>
+      _institutionGroups(List<DemoAccount> filtered) {
+    final order = <String>[];
+    final map = <String, List<DemoAccount>>{};
+    for (final a in filtered) {
+      final institution = a.bank.trim().isEmpty ? 'Other' : a.bank.trim();
+      if (!map.containsKey(institution)) {
+        order.add(institution);
+        map[institution] = [];
+      }
+      map[institution]!.add(a);
+    }
+    return [
+      for (final institution in order)
+        (
+          institution: institution,
+          accounts: map[institution]!,
+          total: map[institution]!.fold<double>(0, (s, a) => s + a.balance),
+        ),
+    ];
   }
 
   Future<void> _refreshAll() async {
@@ -597,15 +620,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
           : account.name!.trim(),
     );
     final last4Ctrl = TextEditingController(text: account.digits);
+    var type = _accountTypes.contains(account.type)
+        ? account.type
+        : _accountTypes.first;
     final nativeBal = account.originalBalance ?? account.balance;
     final balanceCtrl = TextEditingController(
       text: type == 'Credit'
           ? nativeBal.abs().toStringAsFixed(2)
           : nativeBal.toStringAsFixed(2),
     );
-    var type = _accountTypes.contains(account.type)
-        ? account.type
-        : _accountTypes.first;
     var currency = kSupportedCurrencies.contains(account.nativeCurrency)
         ? account.nativeCurrency
         : DisplayCurrency.code;
@@ -820,6 +843,45 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 DashPanelHeader(
                   title: 'Accounts',
                   subtitle: 'Open banking connections',
+                  action: InkWell(
+                    onTap: () => setState(
+                      () => _groupByInstitution = !_groupByInstitution,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: Checkbox(
+                              value: _groupByInstitution,
+                              onChanged: (v) => setState(
+                                () => _groupByInstitution = v ?? false,
+                              ),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'Group by institution',
+                            style: TextStyle(
+                              color: AppColors.mute,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
                 if (filtered.isEmpty)
                   Padding(
@@ -835,174 +897,217 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       ),
                     ),
                   )
-                else
-                  for (final a in filtered)
+                else if (_groupByInstitution)
+                  for (final group in _institutionGroups(filtered)) ...[
                     Container(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
                       decoration: const BoxDecoration(
+                        color: Color(0xFFF8FAFC),
                         border: Border(top: BorderSide(color: AppColors.line)),
                       ),
                       child: Row(
                         children: [
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  a.displayName,
-                                  style: const TextStyle(
-                                    color: AppColors.ink,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: group.institution,
+                                    style: const TextStyle(
+                                      color: AppColors.ink,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  a.bank,
-                                  style: const TextStyle(
-                                    color: AppColors.softMute,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
+                                  TextSpan(
+                                    text:
+                                        '  ${group.accounts.length} account${group.accounts.length == 1 ? '' : 's'}',
+                                    style: const TextStyle(
+                                      color: AppColors.softMute,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 3),
-                                Row(
-                                  children: [
-                                    Text(
-                                      a.digits.isEmpty
-                                          ? a.type
-                                          : '${a.type} · ',
-                                      style: const TextStyle(
-                                        color: AppColors.mute,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    Text(
-                                      a.provider == 'plaid'
-                                          ? (a.digits.isEmpty
-                                              ? 'Plaid'
-                                              : 'Plaid · ')
-                                          : (a.digits.isEmpty
-                                              ? 'Manual'
-                                              : 'Manual · '),
-                                      style: TextStyle(
-                                        color: a.provider == 'plaid'
-                                            ? const Color(0xFF2A7FC4)
-                                            : AppColors.mute,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    AccountNumber(account: a),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    _AccountConnectionPill(account: a),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      a.synced,
-                                      style: const TextStyle(
-                                        color: AppColors.softMute,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    if (a.provider == 'plaid') ...[
-                                      _AccountAction(
-                                        icon: Icons.sync_rounded,
-                                        label: 'Sync',
-                                        onTap: () async {
-                                          final key =
-                                              AccountsController.accountKey(a);
-                                          await _ctrl.syncOne(key);
-                                          if (!mounted) return;
-                                          toast(context, 'Synced');
-                                        },
-                                      ),
-                                      _AccountAction(
-                                        icon: Icons.link_rounded,
-                                        label: 'Reconnect',
-                                        emphasize: a.status == TxnStatus.failed,
-                                        onTap: () async {
-                                          final key =
-                                              AccountsController.accountKey(a);
-                                          try {
-                                            final result =
-                                                await _ctrl.reconnect(key);
-                                            if (!mounted) return;
-                                            if (result == null) return;
-                                            toast(
-                                              context,
-                                              '${result.institutionName} reconnected',
-                                            );
-                                          } catch (e) {
-                                            if (!mounted) return;
-                                            toast(
-                                              context,
-                                              e.toString().replaceFirst(
-                                                    'Exception: ',
-                                                    '',
-                                                  ),
-                                            );
-                                          }
-                                        },
-                                      ),
-                                    ],
-                                    _AccountAction(
-                                      icon: Icons.edit_outlined,
-                                      label: 'Edit',
-                                      onTap: () => _openEditSheet(a),
-                                    ),
-                                    _AccountAction(
-                                      icon: Icons.delete_outline_rounded,
-                                      label: 'Remove',
-                                      danger: true,
-                                      onTap: () async {
-                                        final key =
-                                            AccountsController.accountKey(a);
-                                        final ok = await _ctrl.remove(key);
-                                        if (!mounted) return;
-                                        toast(
-                                          context,
-                                          ok
-                                              ? 'Connection removed'
-                                              : 'Could not remove',
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                           Text(
-                            moneyNative(
-                              a.originalBalance ?? a.balance,
-                              a.nativeCurrency,
-                            ),
-                            style: TextStyle(
-                              color: (a.originalBalance ?? a.balance) < 0
-                                  ? AppColors.danger
-                                  : AppColors.ink,
-                              fontSize: 16,
+                            money(group.total),
+                            style: const TextStyle(
+                              color: AppColors.ink,
+                              fontSize: 12,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                         ],
                       ),
                     ),
+                    for (final a in group.accounts)
+                      _buildAccountTile(a, hideInstitution: true),
+                  ]
+                else
+                  for (final a in filtered) _buildAccountTile(a),
               ],
             ),
           ),
         ),
         ],
       ],
+    );
+  }
+
+  Widget _buildAccountTile(
+    DemoAccount a, {
+    bool hideInstitution = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  a.displayName,
+                  style: const TextStyle(
+                    color: AppColors.ink,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (!hideInstitution) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    a.bank,
+                    style: const TextStyle(
+                      color: AppColors.softMute,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    Text(
+                      a.digits.isEmpty ? a.type : '${a.type} · ',
+                      style: const TextStyle(
+                        color: AppColors.mute,
+                        fontSize: 12,
+                      ),
+                    ),
+                    Text(
+                      a.provider == 'plaid'
+                          ? (a.digits.isEmpty ? 'Plaid' : 'Plaid · ')
+                          : (a.digits.isEmpty ? 'Manual' : 'Manual · '),
+                      style: TextStyle(
+                        color: a.provider == 'plaid'
+                            ? const Color(0xFF2A7FC4)
+                            : AppColors.mute,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    AccountNumber(account: a),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _AccountConnectionPill(account: a),
+                    const SizedBox(width: 8),
+                    Text(
+                      a.synced,
+                      style: const TextStyle(
+                        color: AppColors.softMute,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    if (a.provider == 'plaid') ...[
+                      _AccountAction(
+                        icon: Icons.sync_rounded,
+                        label: 'Sync',
+                        onTap: () async {
+                          final key = AccountsController.accountKey(a);
+                          await _ctrl.syncOne(key);
+                          if (!mounted) return;
+                          toast(context, 'Synced');
+                        },
+                      ),
+                      _AccountAction(
+                        icon: Icons.link_rounded,
+                        label: 'Reconnect',
+                        emphasize: a.status == TxnStatus.failed,
+                        onTap: () async {
+                          final key = AccountsController.accountKey(a);
+                          try {
+                            final result = await _ctrl.reconnect(key);
+                            if (!mounted) return;
+                            if (result == null) return;
+                            toast(
+                              context,
+                              '${result.institutionName} reconnected',
+                            );
+                          } catch (e) {
+                            if (!mounted) return;
+                            toast(
+                              context,
+                              e.toString().replaceFirst('Exception: ', ''),
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                    _AccountAction(
+                      icon: Icons.edit_outlined,
+                      label: 'Edit',
+                      onTap: () => _openEditSheet(a),
+                    ),
+                    _AccountAction(
+                      icon: Icons.delete_outline_rounded,
+                      label: 'Remove',
+                      danger: true,
+                      onTap: () async {
+                        final key = AccountsController.accountKey(a);
+                        final ok = await _ctrl.remove(key);
+                        if (!mounted) return;
+                        toast(
+                          context,
+                          ok ? 'Connection removed' : 'Could not remove',
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Text(
+            moneyNative(
+              a.originalBalance ?? a.balance,
+              a.nativeCurrency,
+            ),
+            style: TextStyle(
+              color: (a.originalBalance ?? a.balance) < 0
+                  ? AppColors.danger
+                  : AppColors.ink,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
