@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
 import '../filter_sort.dart';
+import '../form_validation.dart';
 import '../recurring_controller.dart';
 import '../recurring_scope.dart';
 import '../shimmer.dart';
@@ -194,18 +195,21 @@ class _RecurringScreenState extends State<RecurringScreen> {
     final categoryCtrl = TextEditingController(text: 'Subscriptions');
     final accountCtrl = TextEditingController(text: 'Checking');
     final amountCtrl = TextEditingController(text: '-12.99');
-    final nextCtrl = TextEditingController(text: 'Apr 30');
-    final startCtrl = TextEditingController(text: 'Apr 30, 2026');
+    final nextCtrl = TextEditingController();
+    final startCtrl = TextEditingController();
     final endCtrl = TextEditingController();
     var cadence = 'Monthly';
     var type = MoneyMove.expense;
     var currency = DisplayCurrency.code;
+    var fieldErrors = <String, String?>{};
+    void Function(VoidCallback)? setLocal;
 
     await showDashSheet<void>(
       context: context,
       title: 'Add recurring',
       description: 'Track a subscription or repeating transfer',
       builder: (ctx, setSheetState) {
+        setLocal = setSheetState;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -214,6 +218,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
               controller: nameCtrl,
               hint: 'Netflix',
               autofocus: true,
+              errorText: fieldErrors['name'],
             ),
             const SizedBox(height: 14),
             const DashFieldLabel('Type'),
@@ -239,6 +244,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
                         RegExp(r'[0-9.\-]'),
                       ),
                     ],
+                    errorText: fieldErrors['amount'],
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -295,7 +301,8 @@ class _RecurringScreenState extends State<RecurringScreen> {
                       const DashFieldLabel('Start date'),
                       DashTextField(
                         controller: startCtrl,
-                        hint: 'Apr 30, 2026',
+                        hint: 'YYYY-MM-DD',
+                        errorText: fieldErrors['start'],
                       ),
                     ],
                   ),
@@ -308,7 +315,8 @@ class _RecurringScreenState extends State<RecurringScreen> {
                       const DashFieldLabel('End date'),
                       DashTextField(
                         controller: endCtrl,
-                        hint: 'Blank if ongoing',
+                        hint: 'YYYY-MM-DD',
+                        errorText: fieldErrors['end'],
                       ),
                     ],
                   ),
@@ -319,7 +327,8 @@ class _RecurringScreenState extends State<RecurringScreen> {
             const DashFieldLabel('Next date'),
             DashTextField(
               controller: nextCtrl,
-              hint: 'Apr 30',
+              hint: 'YYYY-MM-DD',
+              errorText: fieldErrors['next'],
             ),
           ],
         );
@@ -336,8 +345,25 @@ class _RecurringScreenState extends State<RecurringScreen> {
             label: 'Add',
             onPressed: () async {
               final trimmed = nameCtrl.text.trim();
-              if (trimmed.isEmpty) {
-                toast(context, 'Enter a merchant or payment name');
+              final nameErr = requiredText(trimmed, 'Name');
+              final parsed = double.tryParse(amountCtrl.text.trim());
+              final amountErr = positiveAmount(parsed?.abs());
+              final startErr = optionalIsoDate(startCtrl.text, 'Start date');
+              final endErr = optionalIsoDate(endCtrl.text, 'End date');
+              final nextErr = optionalIsoDate(nextCtrl.text, 'Next date');
+              final errors = <String, String?>{
+                if (nameErr != null) 'name': nameErr,
+                if (amountErr != null) 'amount': amountErr,
+                if (startErr != null) 'start': startErr,
+                if (endErr != null) 'end': endErr,
+                if (nextErr != null) 'next': nextErr,
+              };
+              setLocal?.call(() => fieldErrors = errors);
+              if (hasFieldErrors(errors)) {
+                toast(
+                  context,
+                  firstFieldError(errors) ?? 'Fix the highlighted fields',
+                );
                 return;
               }
               final next = nextCtrl.text.trim().isEmpty
@@ -351,7 +377,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
                 account: accountCtrl.text.trim().isEmpty
                     ? 'Checking'
                     : accountCtrl.text.trim(),
-                amount: double.tryParse(amountCtrl.text) ?? 0,
+                amount: parsed ?? 0,
                 cadence: cadence,
                 next: next,
                 start: startCtrl.text.trim().isEmpty
@@ -398,17 +424,31 @@ class _RecurringScreenState extends State<RecurringScreen> {
         )
         ? (item.originalCurrency ?? DisplayCurrency.code).toUpperCase()
         : DisplayCurrency.code;
+    var fieldErrors = <String, String?>{};
+    void Function(VoidCallback)? setLocal;
+
+    String? isoOrUnchangedLegacy(String value, String legacy, String label) {
+      final v = value.trim();
+      if (v.isEmpty) return null;
+      if (v == legacy.trim() && optionalIsoDate(v, label) != null) return null;
+      return optionalIsoDate(v, label);
+    }
 
     await showDashSheet<void>(
       context: context,
       title: 'Manage recurring',
       description: '${item.cadence} · ${item.account}',
       builder: (ctx, setSheetState) {
+        setLocal = setSheetState;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const DashFieldLabel('Name'),
-            DashTextField(controller: nameCtrl, autofocus: true),
+            DashTextField(
+              controller: nameCtrl,
+              autofocus: true,
+              errorText: fieldErrors['name'],
+            ),
             const SizedBox(height: 14),
             const DashFieldLabel('Type'),
             DashDropdown<MoneyMove>(
@@ -433,6 +473,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
                         RegExp(r'[0-9.\-]'),
                       ),
                     ],
+                    errorText: fieldErrors['amount'],
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -463,7 +504,11 @@ class _RecurringScreenState extends State<RecurringScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const DashFieldLabel('Start date'),
-                      DashTextField(controller: startCtrl),
+                      DashTextField(
+                        controller: startCtrl,
+                        hint: 'YYYY-MM-DD',
+                        errorText: fieldErrors['start'],
+                      ),
                     ],
                   ),
                 ),
@@ -475,7 +520,8 @@ class _RecurringScreenState extends State<RecurringScreen> {
                       const DashFieldLabel('End date'),
                       DashTextField(
                         controller: endCtrl,
-                        hint: 'Blank if ongoing',
+                        hint: 'YYYY-MM-DD',
+                        errorText: fieldErrors['end'],
                       ),
                     ],
                   ),
@@ -484,7 +530,11 @@ class _RecurringScreenState extends State<RecurringScreen> {
             ),
             const SizedBox(height: 14),
             const DashFieldLabel('Next date'),
-            DashTextField(controller: nextCtrl),
+            DashTextField(
+              controller: nextCtrl,
+              hint: 'YYYY-MM-DD',
+              errorText: fieldErrors['next'],
+            ),
             const SizedBox(height: 16),
             Row(
               children: [
@@ -543,13 +593,33 @@ class _RecurringScreenState extends State<RecurringScreen> {
             label: 'Save',
             onPressed: () async {
               final trimmed = nameCtrl.text.trim();
-              if (trimmed.isEmpty) {
-                toast(context, 'Enter a merchant or payment name');
+              final nameErr = requiredText(trimmed, 'Name');
+              final parsed = double.tryParse(amountCtrl.text.trim());
+              final amountErr = positiveAmount(parsed?.abs());
+              final startErr =
+                  isoOrUnchangedLegacy(startCtrl.text, item.start, 'Start date');
+              final endErr =
+                  isoOrUnchangedLegacy(endCtrl.text, item.end, 'End date');
+              final nextErr =
+                  isoOrUnchangedLegacy(nextCtrl.text, item.next, 'Next date');
+              final errors = <String, String?>{
+                if (nameErr != null) 'name': nameErr,
+                if (amountErr != null) 'amount': amountErr,
+                if (startErr != null) 'start': startErr,
+                if (endErr != null) 'end': endErr,
+                if (nextErr != null) 'next': nextErr,
+              };
+              setLocal?.call(() => fieldErrors = errors);
+              if (hasFieldErrors(errors)) {
+                toast(
+                  context,
+                  firstFieldError(errors) ?? 'Fix the highlighted fields',
+                );
                 return;
               }
               final updated = await _ctrl.patch(item.id, {
                 'name': trimmed,
-                'amount': double.tryParse(amountCtrl.text) ?? item.amount,
+                'amount': parsed ?? item.amount,
                 'next': nextCtrl.text.trim().isEmpty
                     ? item.next
                     : nextCtrl.text.trim(),

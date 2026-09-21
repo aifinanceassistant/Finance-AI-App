@@ -55,7 +55,7 @@ class AccountsController extends ChangeNotifier {
     final digits = lastFour.replaceAll(RegExp(r'\D'), '');
     final suffix = digits.length >= 4
         ? digits.substring(digits.length - 4)
-        : (digits.isEmpty ? '—' : digits);
+        : (digits.isEmpty ? null : digits);
     final type = (json['type'] as String?) ?? 'Checking';
     final balance = (json['balance'] as num?)?.toDouble() ?? 0;
     final originalBalance = (json['originalBalance'] as num?)?.toDouble();
@@ -73,8 +73,8 @@ class AccountsController extends ChangeNotifier {
       bank: institution.isEmpty ? name : institution,
       name: name,
       type: type,
-      number: '····$suffix',
-      lastFour: suffix == '—' ? null : suffix,
+      number: suffix == null ? '' : '····$suffix',
+      lastFour: suffix,
       balance: signedUsd,
       originalBalance: signedOriginal,
       originalCurrency:
@@ -86,7 +86,9 @@ class AccountsController extends ChangeNotifier {
               ? defaultCurrencyRaw
               : null,
       status: connected ? TxnStatus.succeeded : TxnStatus.failed,
-      synced: _syncLabel(json['lastSyncedAt'] as String?),
+      synced: (json['provider'] as String?) == 'plaid'
+          ? _syncLabel(json['lastSyncedAt'] as String?)
+          : '—',
       provider: (json['provider'] as String?) == 'plaid' ? 'plaid' : 'manual',
       connectionId: json['connectionId'] as String?,
     );

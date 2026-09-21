@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
 import '../filter_sort.dart';
+import '../form_validation.dart';
 import '../goals_controller.dart';
 import '../goals_scope.dart';
 import '../shimmer.dart';
@@ -102,12 +103,15 @@ class _GoalsScreenState extends State<GoalsScreen> {
     final dueCtrl = TextEditingController(text: 'Dec 2026');
     var color = _goalColors.first;
     var currency = DisplayCurrency.code;
+    var fieldErrors = <String, String?>{};
+    void Function(VoidCallback)? setLocal;
 
     await showDashSheet<void>(
       context: context,
       title: 'New goal',
       description: 'Track a savings target in this space',
       builder: (ctx, setSheetState) {
+        setLocal = setSheetState;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -116,6 +120,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
               controller: nameCtrl,
               hint: 'Emergency fund',
               autofocus: true,
+              errorText: fieldErrors['name'],
             ),
             const SizedBox(height: 14),
             const DashFieldLabel('Note'),
@@ -138,6 +143,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                         RegExp(r'[0-9.]'),
                       ),
                     ],
+                    errorText: fieldErrors['target'],
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -196,8 +202,18 @@ class _GoalsScreenState extends State<GoalsScreen> {
             label: 'Create',
             onPressed: () async {
               final trimmed = nameCtrl.text.trim();
-              if (trimmed.isEmpty) {
-                toast(context, 'Give your goal a short name');
+              final nameErr = requiredText(trimmed, 'Name');
+              final targetErr = positiveAmount(targetCtrl.text, 'Target');
+              final errors = <String, String?>{
+                if (nameErr != null) 'name': nameErr,
+                if (targetErr != null) 'target': targetErr,
+              };
+              setLocal?.call(() => fieldErrors = errors);
+              if (hasFieldErrors(errors)) {
+                toast(
+                  context,
+                  firstFieldError(errors) ?? 'Fix the highlighted fields',
+                );
                 return;
               }
               if (_goals.any(

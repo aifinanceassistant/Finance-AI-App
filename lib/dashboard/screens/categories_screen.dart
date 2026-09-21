@@ -5,6 +5,7 @@ import '../categories_controller.dart';
 import '../categories_scope.dart';
 import '../data.dart';
 import '../filter_sort.dart';
+import '../form_validation.dart';
 import '../shimmer.dart';
 import '../spaces_scope.dart';
 import '../ui.dart';
@@ -809,7 +810,10 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                         child: AccentButton(
                           label: existing == null ? 'Create' : 'Save',
                           onPressed: () {
-                            if (nameCtrl.text.trim().isEmpty) return;
+                            if (nameCtrl.text.trim().isEmpty) {
+                              toast(ctx, requiredText(nameCtrl.text, 'Name')!);
+                              return;
+                            }
                             Navigator.pop(ctx, true);
                           },
                         ),

@@ -9,6 +9,7 @@ import '../accounts_scope.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
 import '../filter_sort.dart';
+import '../form_validation.dart';
 import '../shimmer.dart';
 import '../spaces_scope.dart';
 import '../ui.dart';
@@ -111,6 +112,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
     var hits = <({String id, String name, List<String> countries})>[];
     var type = _accountTypes.first;
     var currency = DisplayCurrency.code;
+    var fieldErrors = <String, String?>{};
+    void Function(VoidCallback)? setLocal;
     Timer? debounce;
 
     Future<void> runSearch(String q, void Function(void Function()) setSheetState) async {
@@ -132,6 +135,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
       description:
           'Search for your bank, then connect with a provider or enter details manually.',
       builder: (ctx, setSheetState) {
+        setLocal = setSheetState;
         if (institution == null) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -481,6 +485,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
               hint: '4242',
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              errorText: fieldErrors['lastFour'],
             ),
             const SizedBox(height: 14),
             const DashFieldLabel('Starting balance'),
@@ -494,6 +499,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
                     ],
+                    errorText: fieldErrors['balance'],
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -525,8 +531,20 @@ class _AccountsScreenState extends State<AccountsScreen> {
             label: 'Add account',
             onPressed: () async {
               final trimmed = (institution ?? '').trim();
-              if (trimmed.isEmpty) {
-                toast(context, 'Select an institution first');
+              final institutionErr = requiredText(trimmed, 'Institution');
+              final lastFourErr = optionalLastFour(last4Ctrl.text);
+              final balanceErr = nonNegativeAmount(balanceCtrl.text, 'Balance');
+              final errors = <String, String?>{
+                if (institutionErr != null) 'institution': institutionErr,
+                if (lastFourErr != null) 'lastFour': lastFourErr,
+                if (balanceErr != null) 'balance': balanceErr,
+              };
+              setLocal?.call(() => fieldErrors = errors);
+              if (hasFieldErrors(errors)) {
+                toast(
+                  context,
+                  firstFieldError(errors) ?? 'Fix the highlighted fields',
+                );
                 return;
               }
               if (method != 'manual') {
@@ -534,9 +552,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 return;
               }
               final digits = last4Ctrl.text.replaceAll(RegExp(r'\D'), '');
-              final last4 = digits.length >= 4
-                  ? digits.substring(digits.length - 4)
-                  : (digits.isEmpty ? '0000' : digits.padLeft(4, '0'));
+              final last4 = digits; // empty OK; else exactly 4 (validated)
               final created = await _ctrl.create(
                 institution: trimmed,
                 name: nameCtrl.text.trim(),
@@ -584,6 +600,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
     var currency = kSupportedCurrencies.contains(account.nativeCurrency)
         ? account.nativeCurrency
         : DisplayCurrency.code;
+    var fieldErrors = <String, String?>{};
 
     await showDashSheet<void>(
       context: context,
@@ -598,6 +615,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
               controller: bankCtrl,
               hint: 'Chase, Amex, Fidelity…',
               autofocus: true,
+              errorText: fieldErrors['institution'],
             ),
             const SizedBox(height: 14),
             const DashFieldLabel('Account name'),
@@ -620,6 +638,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
               hint: '4242',
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              errorText: fieldErrors['lastFour'],
             ),
             const SizedBox(height: 14),
             const DashFieldLabel('Balance'),
@@ -634,6 +653,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                     ],
+                    errorText: fieldErrors['balance'],
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -653,14 +673,24 @@ class _AccountsScreenState extends State<AccountsScreen> {
               label: 'Save',
               onPressed: () async {
                 final trimmed = bankCtrl.text.trim();
-                if (trimmed.isEmpty) {
-                  toast(context, 'Enter a bank or broker name');
+                final institutionErr = requiredText(trimmed, 'Institution');
+                final lastFourErr = optionalLastFour(last4Ctrl.text);
+                final balanceErr = nonNegativeAmount(balanceCtrl.text, 'Balance');
+                final errors = <String, String?>{
+                  if (institutionErr != null) 'institution': institutionErr,
+                  if (lastFourErr != null) 'lastFour': lastFourErr,
+                  if (balanceErr != null) 'balance': balanceErr,
+                };
+                setSheetState(() => fieldErrors = errors);
+                if (hasFieldErrors(errors)) {
+                  toast(
+                    context,
+                    firstFieldError(errors) ?? 'Fix the highlighted fields',
+                  );
                   return;
                 }
                 final digits = last4Ctrl.text.replaceAll(RegExp(r'\D'), '');
-                final last4 = digits.length >= 4
-                    ? digits.substring(digits.length - 4)
-                    : (digits.isEmpty ? '0000' : digits.padLeft(4, '0'));
+                final last4 = digits;
                 final key = AccountsController.accountKey(account);
                 final updated = await _ctrl.update(
                   key: key,
@@ -817,22 +847,22 @@ class _AccountsScreenState extends State<AccountsScreen> {
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                if (a.displayName != a.bank) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    a.bank,
-                                    style: const TextStyle(
-                                      color: AppColors.softMute,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  a.bank,
+                                  style: const TextStyle(
+                                    color: AppColors.softMute,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                ],
+                                ),
                                 const SizedBox(height: 3),
                                 Row(
                                   children: [
                                     Text(
-                                      '${a.type} · ',
+                                      a.digits.isEmpty
+                                          ? a.type
+                                          : '${a.type} · ',
                                       style: const TextStyle(
                                         color: AppColors.mute,
                                         fontSize: 12,
@@ -840,8 +870,12 @@ class _AccountsScreenState extends State<AccountsScreen> {
                                     ),
                                     Text(
                                       a.provider == 'plaid'
-                                          ? 'Plaid · '
-                                          : 'Manual · ',
+                                          ? (a.digits.isEmpty
+                                              ? 'Plaid'
+                                              : 'Plaid · ')
+                                          : (a.digits.isEmpty
+                                              ? 'Manual'
+                                              : 'Manual · '),
                                       style: TextStyle(
                                         color: a.provider == 'plaid'
                                             ? const Color(0xFF2A7FC4)

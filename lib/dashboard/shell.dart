@@ -33,6 +33,7 @@ import 'transactions_scope.dart';
 import 'ui.dart';
 import 'variant_style.dart';
 import 'dash_sheets.dart';
+import 'form_validation.dart';
 
 enum DashTab { home, transactions, categories, accounts, more }
 
@@ -296,65 +297,92 @@ class _DashboardShellState extends State<DashboardShell> {
     final last4 = TextEditingController();
     final balance = TextEditingController(text: '0');
     var type = 'Checking';
+    var fieldErrors = <String, String?>{};
     await showDashSheet<void>(
       context: context,
       title: 'Connect bank',
       description: 'Link an institution to sync balances',
-      builder: (ctx, setLocal) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const DashFieldLabel('Institution'),
-          DashTextField(controller: bank, hint: 'Chase, Amex…', autofocus: true),
-          const SizedBox(height: 12),
-          const DashFieldLabel('Account type'),
-          DashDropdown<String>(
-            value: type,
-            items: const ['Checking', 'Savings', 'Credit', 'Cash'],
-            labelOf: (v) => v,
-            onChanged: (v) => setLocal(() => type = v),
-          ),
-          const SizedBox(height: 12),
-          const DashFieldLabel('Last 4 digits'),
-          DashTextField(controller: last4, hint: '4242'),
-          const SizedBox(height: 12),
-          const DashFieldLabel('Starting balance'),
-          DashTextField(
-            controller: balance,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          ),
-          const SizedBox(height: 16),
-          sheetCancelSave(
-            context: ctx,
-            saveLabel: 'Connect',
-            onSave: () async {
-              final name = bank.text.trim();
-              if (name.isEmpty) {
-                toast(ctx, 'Enter an institution name');
-                return;
-              }
-              final digits = last4.text.replaceAll(RegExp(r'\D'), '');
-              final suffix = digits.length >= 4
-                  ? digits.substring(digits.length - 4)
-                  : (digits.isEmpty ? '0000' : digits.padLeft(4, '0'));
-              final created = await accounts.create(
-                institution: name,
-                type: type,
-                lastFour: suffix,
-                balance: double.tryParse(balance.text) ?? 0,
-              );
-              if (!ctx.mounted) return;
-              if (created == null) {
-                toast(ctx, 'Could not connect account');
-                return;
-              }
-              Navigator.pop(ctx);
-              _go(DashTab.accounts);
-              if (!mounted) return;
-              toast(context, 'Connected $name · $type ····$suffix');
-            },
-          ),
-        ],
-      ),
+      builder: (ctx, setLocal) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const DashFieldLabel('Institution'),
+            DashTextField(
+              controller: bank,
+              hint: 'Chase, Amex…',
+              autofocus: true,
+              errorText: fieldErrors['institution'],
+            ),
+            const SizedBox(height: 12),
+            const DashFieldLabel('Account type'),
+            DashDropdown<String>(
+              value: type,
+              items: const ['Checking', 'Savings', 'Credit', 'Cash'],
+              labelOf: (v) => v,
+              onChanged: (v) => setLocal(() => type = v),
+            ),
+            const SizedBox(height: 12),
+            const DashFieldLabel('Last 4 digits'),
+            DashTextField(
+              controller: last4,
+              hint: '4242',
+              errorText: fieldErrors['lastFour'],
+            ),
+            const SizedBox(height: 12),
+            const DashFieldLabel('Starting balance'),
+            DashTextField(
+              controller: balance,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              errorText: fieldErrors['balance'],
+            ),
+            const SizedBox(height: 16),
+            sheetCancelSave(
+              context: ctx,
+              saveLabel: 'Connect',
+              onSave: () async {
+                final name = bank.text.trim();
+                final institutionErr = requiredText(name, 'Institution');
+                final lastFourErr = optionalLastFour(last4.text);
+                final balanceErr = nonNegativeAmount(balance.text, 'Balance');
+                final errors = <String, String?>{
+                  if (institutionErr != null) 'institution': institutionErr,
+                  if (lastFourErr != null) 'lastFour': lastFourErr,
+                  if (balanceErr != null) 'balance': balanceErr,
+                };
+                setLocal(() => fieldErrors = errors);
+                if (hasFieldErrors(errors)) {
+                  toast(
+                    ctx,
+                    firstFieldError(errors) ?? 'Fix the highlighted fields',
+                  );
+                  return;
+                }
+                final suffix = last4.text.replaceAll(RegExp(r'\D'), '');
+                final created = await accounts.create(
+                  institution: name,
+                  type: type,
+                  lastFour: suffix,
+                  balance: double.tryParse(balance.text) ?? 0,
+                );
+                if (!ctx.mounted) return;
+                if (created == null) {
+                  toast(ctx, 'Could not connect account');
+                  return;
+                }
+                Navigator.pop(ctx);
+                _go(DashTab.accounts);
+                if (!mounted) return;
+                toast(
+                  context,
+                  suffix.isEmpty
+                      ? 'Connected $name · $type'
+                      : 'Connected $name · $type ····$suffix',
+                );
+              },
+            ),
+          ],
+        );
+      },
     );
     bank.dispose();
     last4.dispose();

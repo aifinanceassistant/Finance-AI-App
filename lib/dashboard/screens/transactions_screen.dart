@@ -10,6 +10,7 @@ import '../accounts_scope.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
 import '../filter_sort.dart';
+import '../form_validation.dart';
 import '../shimmer.dart';
 import '../transactions_controller.dart';
 import '../transactions_scope.dart';
@@ -874,6 +875,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     ];
     var accountKey = accountKeys.isNotEmpty ? accountKeys.first : '';
     var currency = DisplayCurrency.code;
+    var fieldErrors = <String, String?>{};
     final dateCtrl = TextEditingController(
       text: DateTime.now().toIso8601String().substring(0, 10),
     );
@@ -898,6 +900,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               controller: merchantCtrl,
               hint: 'Coffee, rent, payroll…',
               autofocus: true,
+              errorText: fieldErrors['description'],
             ),
             const SizedBox(height: 14),
             const DashFieldLabel('Amount'),
@@ -912,6 +915,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                     ],
                     hint: '0.00',
+                    errorText: fieldErrors['amount'],
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -949,9 +953,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             const SizedBox(height: 14),
             const DashFieldLabel('Account'),
             if (accounts.isEmpty)
-              const Text(
-                'Connect a bank account first',
-                style: TextStyle(color: AppColors.softMute, fontSize: 13),
+              Text(
+                fieldErrors['account'] ?? 'Connect a bank account first',
+                style: TextStyle(
+                  color: fieldErrors['account'] != null
+                      ? AppColors.danger
+                      : AppColors.softMute,
+                  fontSize: 13,
+                ),
               )
             else
               DashDropdown<String>(
@@ -971,32 +980,45 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             DashTextField(
               controller: dateCtrl,
               hint: 'YYYY-MM-DD',
+              errorText: fieldErrors['date'],
             ),
             const SizedBox(height: 18),
             AccentButton(
               label: 'Add',
               onPressed: () async {
                 final merchant = merchantCtrl.text.trim();
-                final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
-                if (merchant.isEmpty || amount <= 0) {
-                  toast(context, 'Enter a description and amount');
-                  return;
-                }
+                final descErr = requiredText(merchant, 'Description');
+                final amountErr = positiveAmount(amountCtrl.text);
+                final dateErr = requiredIsoDate(dateCtrl.text);
                 final acct = selectedAccount();
-                if (acct == null) {
-                  toast(context, 'Connect a bank account first');
+                final accountErr = acct == null
+                    ? 'Account is required.'
+                    : null;
+                final id = acct?.id?.trim() ?? '';
+                final errors = <String, String?>{
+                  if (descErr != null) 'description': descErr,
+                  if (amountErr != null) 'amount': amountErr,
+                  if (accountErr != null) 'account': accountErr,
+                  if (dateErr != null) 'date': dateErr,
+                };
+                setSheetState(() => fieldErrors = errors);
+                if (hasFieldErrors(errors)) {
+                  toast(
+                    context,
+                    firstFieldError(errors) ?? 'Fix the highlighted fields',
+                  );
                   return;
                 }
-                final id = acct.id?.trim() ?? '';
                 if (id.isEmpty && !_ctrl.spaceId.startsWith('fake')) {
                   toast(context, 'Connect a bank account first');
                   return;
                 }
+                final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
                 final created = await _ctrl.create(
                   merchant: merchant,
                   amount: amount,
                   accountId: id.isNotEmpty ? id : accountKey,
-                  accountLabel: '${acct.bank} · ${acct.number}',
+                  accountLabel: '${acct!.bank} · ${acct.number}',
                   category: category,
                   type: type,
                   date: dateCtrl.text.trim(),

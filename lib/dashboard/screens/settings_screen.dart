@@ -9,6 +9,7 @@ import '../../theme/app_theme.dart';
 import '../../variations/models.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
+import '../form_validation.dart';
 import '../spaces_scope.dart';
 import '../ui.dart';
 import 'users_permissions_screen.dart';
@@ -93,6 +94,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _billingLoaded = false;
   String _spaceSwitcher = 'tabs';
   List<String> _tags = ['Business'];
+  String? _nameError;
+  String? _emailError;
+  String? _phoneError;
 
   String get _email => _emailCtrl.text.trim().isEmpty
       ? 'alex@financeai.app'
@@ -471,13 +475,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 16),
         const DashFieldLabel('Full name'),
-        DashTextField(controller: _nameCtrl, hint: 'Your name'),
+        DashTextField(
+          controller: _nameCtrl,
+          hint: 'Your name',
+          errorText: _nameError,
+        ),
         const SizedBox(height: 12),
         const DashFieldLabel('Email'),
         DashTextField(
           controller: _emailCtrl,
           hint: 'you@email.com',
           keyboardType: TextInputType.emailAddress,
+          errorText: _emailError,
         ),
         const SizedBox(height: 12),
         const DashFieldLabel('Phone'),
@@ -485,6 +494,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           controller: _phoneCtrl,
           hint: '+1 …',
           keyboardType: TextInputType.phone,
+          errorText: _phoneError,
         ),
         const SizedBox(height: 16),
         Align(
@@ -492,7 +502,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: AccentButton(
             label: 'Save',
             onPressed: () {
-              setState(() {});
+              final nameErr = requiredText(_nameCtrl.text, 'Name');
+              final emailErr = emailValidator(_emailCtrl.text);
+              final phoneErr = optionalPhone(_phoneCtrl.text);
+              setState(() {
+                _nameError = nameErr;
+                _emailError = emailErr;
+                _phoneError = phoneErr;
+              });
+              final first = nameErr ?? emailErr ?? phoneErr;
+              if (first != null) {
+                toast(context, first);
+                return;
+              }
               toast(context, 'Profile saved');
             },
           ),
@@ -1152,6 +1174,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _passwordSheet() async {
     final pass = TextEditingController();
     final confirm = TextEditingController();
+    String? passError;
+    String? confirmError;
     await showDashSheet<void>(
       context: context,
       title: 'Reset password',
@@ -1166,6 +1190,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               hint: '••••••••',
               obscureText: true,
               autofocus: true,
+              errorText: passError,
             ),
             const SizedBox(height: 12),
             const DashFieldLabel('Confirm password'),
@@ -1173,6 +1198,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               controller: confirm,
               hint: '••••••••',
               obscureText: true,
+              errorText: confirmError,
             ),
             const SizedBox(height: 10),
             GhostButton(
@@ -1187,12 +1213,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               context: ctx,
               saveLabel: 'Update',
               onSave: () {
-                if (pass.text.length < 8) {
-                  toast(context, 'Use at least 8 characters');
-                  return;
+                String? pErr;
+                String? cErr;
+                if (pass.text.trim().isEmpty) {
+                  pErr = 'Password is required.';
+                } else if (pass.text.length < 8) {
+                  pErr = 'Use at least 8 characters';
                 }
-                if (pass.text.isEmpty || pass.text != confirm.text) {
-                  toast(context, 'Passwords must match');
+                if (pass.text != confirm.text) {
+                  cErr = 'Passwords must match';
+                }
+                setSheet(() {
+                  passError = pErr;
+                  confirmError = cErr;
+                });
+                if (pErr != null || cErr != null) {
+                  toast(context, pErr ?? cErr!);
                   return;
                 }
                 final messenger = ScaffoldMessenger.of(context);
@@ -1315,6 +1351,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _paymentSheet() async {
     final card = TextEditingController(text: _card);
+    String? cardError;
     await showDashSheet<void>(
       context: context,
       title: 'Update payment method',
@@ -1332,14 +1369,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 FilteringTextInputFormatter.digitsOnly,
                 LengthLimitingTextInputFormatter(4),
               ],
+              errorText: cardError,
             ),
             const SizedBox(height: 16),
             sheetCancelSave(
               context: ctx,
               saveLabel: 'Save card',
               onSave: () {
+                final err = optionalLastFour(card.text);
+                setSheet(() => cardError = err);
+                if (err != null) {
+                  toast(context, err);
+                  return;
+                }
                 final digits = card.text.replaceAll(RegExp(r'\D'), '');
-                final next = digits.isEmpty ? '4242' : digits;
+                final next = digits.isEmpty ? _card : digits;
                 setState(() => _card = next);
                 Navigator.pop(ctx);
                 toast(context, 'Card updated · Visa ···· $next');

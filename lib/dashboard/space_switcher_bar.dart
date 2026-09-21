@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'form_validation.dart';
 import 'screens/users_permissions_screen.dart';
 import 'shimmer.dart';
 import 'spaces.dart';
@@ -99,7 +100,13 @@ class SpaceSwitcherBar extends StatelessWidget {
         );
       },
     );
-    if (name == null || name.isEmpty) return;
+    if (name == null) return;
+    if (name.isEmpty) {
+      if (context.mounted) {
+        toast(context, requiredText(name, 'Space name')!);
+      }
+      return;
+    }
     final lower = name.toLowerCase();
     final type = RegExp(
       r'\b(corp|inc|llc|ltd|gmbh|company|studio|labs|agency|media)\b',
@@ -202,6 +209,8 @@ class SpaceSwitcherBar extends StatelessWidget {
       );
       if (name != null && name.isNotEmpty) {
         await spaces.rename(space.id, name);
+      } else if (name != null && name.isEmpty && context.mounted) {
+        toast(context, requiredText(name, 'Space name')!);
       }
     } else if (action == 'delete') {
       await spaces.remove(space.id);

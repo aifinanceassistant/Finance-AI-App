@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -7,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
 import '../filter_sort.dart';
+import '../form_validation.dart';
 import '../investments_controller.dart';
 import '../investments_scope.dart';
 import '../shimmer.dart';
@@ -119,12 +118,15 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
     final costCtrl = TextEditingController(text: '1000');
     var type = _holdingTypes.first;
     var currency = DisplayCurrency.code;
+    var fieldErrors = <String, String?>{};
+    void Function(VoidCallback)? setLocal;
 
     await showDashSheet<void>(
       context: context,
       title: 'Add holding',
       description: 'Track a position in this space',
       builder: (ctx, setSheetState) {
+        setLocal = setSheetState;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -133,6 +135,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
               controller: nameCtrl,
               hint: 'Vanguard Total Stock',
               autofocus: true,
+              errorText: fieldErrors['name'],
             ),
             const SizedBox(height: 14),
             Row(
@@ -145,6 +148,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                       DashTextField(
                         controller: tickerCtrl,
                         hint: 'VTI',
+                        errorText: fieldErrors['ticker'],
                       ),
                     ],
                   ),
@@ -192,6 +196,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                             RegExp(r'[0-9.]'),
                           ),
                         ],
+                        errorText: fieldErrors['value'],
                       ),
                     ],
                   ),
@@ -212,6 +217,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
                             RegExp(r'[0-9.]'),
                           ),
                         ],
+                        errorText: fieldErrors['cost'],
                       ),
                     ],
                   ),
@@ -234,16 +240,30 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
             onPressed: () async {
               final trimmedName = nameCtrl.text.trim();
               final trimmedTicker = tickerCtrl.text.trim().toUpperCase();
-              if (trimmedName.isEmpty || trimmedTicker.isEmpty) {
-                toast(context, 'Name and ticker are required');
+              final nameErr = requiredText(trimmedName, 'Name');
+              final tickerErr = requiredText(trimmedTicker, 'Ticker');
+              final valueErr = nonNegativeAmount(valueCtrl.text, 'Value');
+              final costErr = nonNegativeAmount(costCtrl.text, 'Cost');
+              final errors = <String, String?>{
+                if (nameErr != null) 'name': nameErr,
+                if (tickerErr != null) 'ticker': tickerErr,
+                if (valueErr != null) 'value': valueErr,
+                if (costErr != null) 'cost': costErr,
+              };
+              setLocal?.call(() => fieldErrors = errors);
+              if (hasFieldErrors(errors)) {
+                toast(
+                  context,
+                  firstFieldError(errors) ?? 'Fix the highlighted fields',
+                );
                 return;
               }
               if (_holdings.any((h) => h.ticker == trimmedTicker)) {
                 toast(context, 'That symbol is already in the portfolio');
                 return;
               }
-              final v = math.max(0.0, double.tryParse(valueCtrl.text) ?? 0);
-              final c = math.max(0.0, double.tryParse(costCtrl.text) ?? v);
+              final v = double.tryParse(valueCtrl.text) ?? 0;
+              final c = double.tryParse(costCtrl.text) ?? v;
               final created = await _ctrl.create(
                 name: trimmedName,
                 ticker: trimmedTicker,

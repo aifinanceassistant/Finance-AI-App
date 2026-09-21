@@ -146,6 +146,7 @@ class DashTextField extends StatelessWidget {
     this.autofocus = false,
     this.obscureText = false,
     this.inputFormatters,
+    this.errorText,
   });
 
   final TextEditingController controller;
@@ -154,9 +155,15 @@ class DashTextField extends StatelessWidget {
   final bool autofocus;
   final bool obscureText;
   final List<TextInputFormatter>? inputFormatters;
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
+    final hasError = errorText != null && errorText!.isNotEmpty;
+    final errorBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: AppColors.danger),
+    );
     return TextField(
       controller: controller,
       autofocus: autofocus,
@@ -171,20 +178,38 @@ class DashTextField extends StatelessWidget {
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: const TextStyle(color: AppColors.softMute, fontSize: 14),
+        errorText: hasError ? errorText : null,
+        errorStyle: const TextStyle(
+          color: AppColors.danger,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
         filled: true,
         fillColor: Colors.white,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.line),
+          borderSide: BorderSide(
+            color: hasError ? AppColors.danger : AppColors.line,
+          ),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.line),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.brand, width: 1.4),
+        enabledBorder: hasError
+            ? errorBorder
+            : OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.line),
+              ),
+        focusedBorder: hasError
+            ? errorBorder.copyWith(
+                borderSide: const BorderSide(color: AppColors.danger, width: 1.4),
+              )
+            : OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.brand, width: 1.4),
+              ),
+        errorBorder: errorBorder,
+        focusedErrorBorder: errorBorder.copyWith(
+          borderSide: const BorderSide(color: AppColors.danger, width: 1.4),
         ),
       ),
     );

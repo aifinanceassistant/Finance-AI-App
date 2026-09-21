@@ -416,6 +416,8 @@ class _AccountNumberState extends State<AccountNumber> {
   @override
   Widget build(BuildContext context) {
     final digits = widget.account.digits;
+    if (digits.isEmpty) return const SizedBox.shrink();
+
     final style = widget.style ??
         const TextStyle(
           color: AppColors.softMute,
@@ -427,35 +429,33 @@ class _AccountNumberState extends State<AccountNumber> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          _revealed && digits.isNotEmpty ? digits : '••••',
+          _revealed ? digits : '••••',
           style: style,
         ),
-        if (digits.isNotEmpty) ...[
-          const SizedBox(width: 2),
-          Tooltip(
-            key: ValueKey(_revealed ? 'hide' : 'view'),
-            message: _revealed ? 'Hide' : 'View',
-            waitDuration: const Duration(milliseconds: 250),
-            child: InkWell(
-              onTap: () {
-                // Dismiss any open tooltip before flipping state.
-                Tooltip.dismissAllToolTips();
-                setState(() => _revealed = !_revealed);
-              },
-              borderRadius: BorderRadius.circular(4),
-              child: Padding(
-                padding: const EdgeInsets.all(2),
-                child: Icon(
-                  _revealed
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                  size: 14,
-                  color: AppColors.softMute,
-                ),
+        const SizedBox(width: 2),
+        Tooltip(
+          key: ValueKey(_revealed ? 'hide' : 'view'),
+          message: _revealed ? 'Hide' : 'View',
+          waitDuration: const Duration(milliseconds: 250),
+          child: InkWell(
+            onTap: () {
+              // Dismiss any open tooltip before flipping state.
+              Tooltip.dismissAllToolTips();
+              setState(() => _revealed = !_revealed);
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: Padding(
+              padding: const EdgeInsets.all(2),
+              child: Icon(
+                _revealed
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                size: 14,
+                color: AppColors.softMute,
               ),
             ),
           ),
-        ],
+        ),
       ],
     );
   }

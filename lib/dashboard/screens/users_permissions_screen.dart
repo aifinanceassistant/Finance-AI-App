@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../spaces/permissions.dart';
 import '../../theme/app_theme.dart';
 import '../dash_sheets.dart';
+import '../form_validation.dart';
 import '../spaces.dart';
 import '../spaces_scope.dart';
 import '../ui.dart';
@@ -94,6 +95,7 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> {
     var role = 'viewer';
     var permissions = permissionsForRole('viewer');
     String? inviteToken;
+    String? emailError;
 
     await showDashSheet<void>(
       context: context,
@@ -142,6 +144,7 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> {
               hint: 'teammate@example.com',
               keyboardType: TextInputType.emailAddress,
               autofocus: true,
+              errorText: emailError,
             ),
             const SizedBox(height: 12),
             const DashFieldLabel('Role'),
@@ -177,8 +180,10 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> {
               saveLabel: 'Send invite',
               onSave: () async {
                 final email = emailCtrl.text.trim();
-                if (email.isEmpty) {
-                  toast(context, 'Email is required');
+                final err = emailValidator(email);
+                setSheet(() => emailError = err);
+                if (err != null) {
+                  toast(context, err);
                   return;
                 }
                 final result = await spaces.inviteMember(
