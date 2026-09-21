@@ -188,6 +188,8 @@ class FilterSortBar extends StatelessWidget {
     this.search = '',
     this.onSearchChanged,
     this.searchHint = 'Search…',
+    this.showStats,
+    this.onShowStatsChanged,
   });
 
   final List<FilterFieldDef> fields;
@@ -201,9 +203,13 @@ class FilterSortBar extends StatelessWidget {
   final String search;
   final ValueChanged<String>? onSearchChanged;
   final String searchHint;
+  final bool? showStats;
+  final ValueChanged<bool>? onShowStatsChanged;
 
   @override
   Widget build(BuildContext context) {
+    final statsVisible = showStats;
+    final onStats = onShowStatsChanged;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -221,11 +227,28 @@ class FilterSortBar extends StatelessWidget {
         GhostButton(
           label: rules.isEmpty ? 'Filter' : 'Filter · ${rules.length}',
           onPressed: () => _openFilters(context),
+          foregroundColor: rules.isNotEmpty ? AppColors.brandDark : null,
         ),
         GhostButton(
           label: sorts.isEmpty ? 'Sort' : 'Sort · ${sorts.length}',
           onPressed: () => _openSorts(context),
+          foregroundColor: sorts.isNotEmpty ? AppColors.brandDark : null,
         ),
+        if (statsVisible != null && onStats != null)
+          IconButton(
+            onPressed: () => onStats(!statsVisible),
+            tooltip: statsVisible ? 'Hide stats' : 'Show stats',
+            icon: Icon(
+              Icons.speed_outlined,
+              size: 18,
+              color: statsVisible
+                  ? AppColors.brandDark
+                  : AppColors.mute,
+            ),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+          ),
       ],
     );
   }

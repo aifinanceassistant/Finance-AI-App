@@ -114,6 +114,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
   List<FilterRule> _filterRules = [];
   List<SortRule> _sortRules = [];
   String _search = '';
+  var _showStats = false;
 
   RecurringController get _ctrl => RecurringScope.of(context);
   List<DemoRecurring> get _recurring => _ctrl.items;
@@ -824,38 +825,42 @@ class _RecurringScreenState extends State<RecurringScreen> {
               searchHint: 'Search recurring…',
               onRulesChanged: (rules) => setState(() => _filterRules = rules),
               onSortsChanged: (sorts) => setState(() => _sortRules = sorts),
+              showStats: _showStats,
+              onShowStatsChanged: (v) => setState(() => _showStats = v),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Expanded(
-                  child: DashKpi(
-                    label: 'Active series',
-                    value: '${filtered.length}',
+          if (_showStats) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: DashKpi(
+                      label: 'Active series',
+                      value: '${filtered.length}',
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: DashKpi(
-                    label: 'Monthly out',
-                    value: money(outflow),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: DashKpi(
+                      label: 'Monthly out',
+                      value: money(outflow),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: DashKpi(
-              label: 'Monthly in',
-              value: money(inflow),
-              valueColor: AppColors.success,
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: DashKpi(
+                label: 'Monthly in',
+                value: money(inflow),
+                valueColor: AppColors.success,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
+          ],
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: DashPanel(

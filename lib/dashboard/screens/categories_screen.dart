@@ -245,6 +245,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   List<SortRule> _sortRules = [];
   bool _gridView = true;
   bool _spendMixOpen = false;
+  var _showStats = false;
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month, 1);
   CategoriesController? _ctrl;
   var _syncedSpaceId = '';
@@ -1558,44 +1559,47 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               searchHint: 'Search categories…',
               onRulesChanged: (rules) => setState(() => _filterRules = rules),
               onSortsChanged: (sorts) => setState(() => _sortRules = sorts),
+              showStats: _showStats,
+              onShowStatsChanged: (v) => setState(() => _showStats = v),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Expanded(
-                  child: DashKpi(
-                    label: 'Active',
-                    value: _archivedCount > 0
-                        ? '$_activeCount · $_archivedCount archived'
-                        : '$_activeCount',
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: DashKpi(
-                    label: 'Budget',
-                    value: moneyWhole(
-                      _categories
-                          .where((c) => !c.hidden && c.group != 'Income')
-                          .fold<double>(
-                            0,
-                            (s, c) => s + c.budgetFor(_monthKey),
-                          ),
+          if (_showStats)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: DashKpi(
+                      label: 'Active',
+                      value: _archivedCount > 0
+                          ? '$_activeCount · $_archivedCount archived'
+                          : '$_activeCount',
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: DashKpi(
-                    label: 'Spent',
-                    value: moneyWhole(_totalSpend),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: DashKpi(
+                      label: 'Budget',
+                      value: moneyWhole(
+                        _categories
+                            .where((c) => !c.hidden && c.group != 'Income')
+                            .fold<double>(
+                              0,
+                              (s, c) => s + c.budgetFor(_monthKey),
+                            ),
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: DashKpi(
+                      label: 'Spent',
+                      value: moneyWhole(_totalSpend),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
           if (spendRows.isNotEmpty) ...[
             const SizedBox(height: 16),
             Padding(

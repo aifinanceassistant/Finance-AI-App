@@ -69,6 +69,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
   List<FilterRule> _filterRules = [];
   List<SortRule> _sortRules = [];
   String _search = '';
+  var _showStats = false;
 
   InvestmentsController get _ctrl => InvestmentsScope.of(context);
   List<DemoHolding> get _holdings => _ctrl.holdings;
@@ -417,37 +418,43 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
               searchHint: 'Search holdings…',
               onRulesChanged: (rules) => setState(() => _filterRules = rules),
               onSortsChanged: (sorts) => setState(() => _sortRules = sorts),
+              showStats: _showStats,
+              onShowStatsChanged: (v) => setState(() => _showStats = v),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Expanded(
-                  child: DashKpi(label: 'Portfolio value', value: money(total)),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: DashKpi(
-                    label: 'Total gain',
-                    value: '${gain >= 0 ? '+' : ''}${money(gain)}',
-                    valueColor: gain >= 0 ? AppColors.success : AppColors.danger,
+          if (_showStats) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: DashKpi(label: 'Portfolio value', value: money(total)),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: DashKpi(
+                      label: 'Total gain',
+                      value: '${gain >= 0 ? '+' : ''}${money(gain)}',
+                      valueColor:
+                          gain >= 0 ? AppColors.success : AppColors.danger,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: DashKpi(
-              label: 'Return',
-              value:
-                  '${gainPct >= 0 ? '+' : ''}${gainPct.toStringAsFixed(1)}%',
-              valueColor: gainPct >= 0 ? AppColors.success : AppColors.danger,
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: DashKpi(
+                label: 'Return',
+                value:
+                    '${gainPct >= 0 ? '+' : ''}${gainPct.toStringAsFixed(1)}%',
+                valueColor:
+                    gainPct >= 0 ? AppColors.success : AppColors.danger,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
+          ],
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: DashPanel(

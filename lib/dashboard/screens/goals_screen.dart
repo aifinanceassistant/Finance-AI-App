@@ -63,6 +63,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
   List<FilterRule> _filterRules = [];
   List<SortRule> _sortRules = [];
   String _search = '';
+  var _showStats = false;
   bool _sweepEnabled = true;
   bool _roundupEnabled = true;
 
@@ -388,29 +389,33 @@ class _GoalsScreenState extends State<GoalsScreen> {
               searchHint: 'Search goals…',
               onRulesChanged: (rules) => setState(() => _filterRules = rules),
               onSortsChanged: (sorts) => setState(() => _sortRules = sorts),
+              showStats: _showStats,
+              onShowStatsChanged: (v) => setState(() => _showStats = v),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Expanded(
-                  child: DashKpi(
-                    label: 'Saved toward goals',
-                    value: moneyWhole(totalSaved),
+          if (_showStats) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: DashKpi(
+                      label: 'Saved toward goals',
+                      value: moneyWhole(totalSaved),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: DashKpi(
-                    label: 'Total targets',
-                    value: moneyWhole(totalTarget),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: DashKpi(
+                      label: 'Total targets',
+                      value: moneyWhole(totalTarget),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
+          ],
           if (filtered.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),

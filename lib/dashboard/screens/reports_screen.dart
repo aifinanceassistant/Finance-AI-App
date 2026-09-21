@@ -18,6 +18,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   List<FilterRule> _rules = [];
   List<SortRule> _sorts = [];
   String _search = '';
+  var _showStats = false;
 
   static const _fields = [
     FilterFieldDef(id: 'merchant', label: 'Description', type: FilterFieldType.text),
@@ -124,6 +125,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 },
                 defaultFilterField: 'category',
                 defaultSortField: 'amount',
+                showStats: _showStats,
+                onShowStatsChanged: (v) => setState(() => _showStats = v),
               ),
               GhostButton(
                 label: 'Last $_period months',
@@ -149,37 +152,51 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ),
             ],
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: DashKpi(label: 'Income', value: moneyWhole(income)),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: DashKpi(label: 'Spend', value: moneyWhole(spend)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DashKpi(label: 'Saved', value: moneyWhole(saved)),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: DashKpi(label: 'Savings rate', value: '$rate%'),
-                    ),
-                  ],
-                ),
-              ],
+          if (_showStats) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DashKpi(
+                          label: 'Income',
+                          value: moneyWhole(income),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: DashKpi(
+                          label: 'Spend',
+                          value: moneyWhole(spend),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DashKpi(
+                          label: 'Saved',
+                          value: moneyWhole(saved),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: DashKpi(
+                          label: 'Savings rate',
+                          value: '$rate%',
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
+          ],
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: DashPanel(

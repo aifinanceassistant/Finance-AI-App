@@ -709,6 +709,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   late List<FilterRule> _filterRules;
   List<SortRule> _sortRules = [];
   String _search = '';
+  var _showStats = false;
   final _scroll = ScrollController();
   bool _stickyPinned = false;
   bool _stickyStatsOpen = false;
@@ -1222,56 +1223,61 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                 setState(() => _filterRules = rules),
                             onSortsChanged: (sorts) =>
                                 setState(() => _sortRules = sorts),
+                            showStats: _showStats,
+                            onShowStatsChanged: (v) =>
+                                setState(() => _showStats = v),
                           ),
                         ),
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            child: _CashflowKpiCard(
-                              label: 'Inflow (filtered)',
-                              value: money(inflow),
-                              buckets: buckets,
-                              metric: _CashMetric.inflow,
-                              onOpen: () => _openCashflowDetail(
-                                filtered,
-                                _CashMetric.inflow,
+                    if (_showStats) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: _CashflowKpiCard(
+                                label: 'Inflow (filtered)',
+                                value: money(inflow),
+                                buckets: buckets,
+                                metric: _CashMetric.inflow,
+                                onOpen: () => _openCashflowDetail(
+                                  filtered,
+                                  _CashMetric.inflow,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _CashflowKpiCard(
-                              label: 'Outflow (filtered)',
-                              value: money(outflow),
-                              buckets: buckets,
-                              metric: _CashMetric.outflow,
-                              onOpen: () => _openCashflowDetail(
-                                filtered,
-                                _CashMetric.outflow,
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _CashflowKpiCard(
+                                label: 'Outflow (filtered)',
+                                value: money(outflow),
+                                buckets: buckets,
+                                metric: _CashMetric.outflow,
+                                onOpen: () => _openCashflowDetail(
+                                  filtered,
+                                  _CashMetric.outflow,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: _CashflowKpiCard(
-                        label: 'Net',
-                        value: money(net, signed: true),
-                        buckets: buckets,
-                        metric: _CashMetric.net,
-                        onOpen: () =>
-                            _openCashflowDetail(filtered, _CashMetric.net),
+                      const SizedBox(height: 10),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: _CashflowKpiCard(
+                          label: 'Net',
+                          value: money(net, signed: true),
+                          buckets: buckets,
+                          metric: _CashMetric.net,
+                          onOpen: () =>
+                              _openCashflowDetail(filtered, _CashMetric.net),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 16),
+                    ],
                   ],
                 ],
               ),
@@ -1465,6 +1471,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                     setState(() => _filterRules = rules),
                                 onSortsChanged: (sorts) =>
                                     setState(() => _sortRules = sorts),
+                                showStats: _showStats,
+                                onShowStatsChanged: (v) =>
+                                    setState(() => _showStats = v),
                               ),
                             ),
                             const SizedBox(width: 4),

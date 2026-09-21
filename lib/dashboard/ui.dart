@@ -89,6 +89,7 @@ class DashPanel extends StatelessWidget {
     return Container(
       margin: margin,
       padding: padding,
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(radius),
@@ -258,22 +259,33 @@ class DashKpi extends StatelessWidget {
 }
 
 class GhostButton extends StatelessWidget {
-  const GhostButton({super.key, required this.label, this.onPressed});
+  const GhostButton({
+    super.key,
+    required this.label,
+    this.onPressed,
+    this.foregroundColor,
+  });
 
   final String label;
   final VoidCallback? onPressed;
+  final Color? foregroundColor;
 
   @override
   Widget build(BuildContext context) {
     final style = DashStyleScope.maybeOf(context);
     final radius = style?.radius ?? 8;
+    final fg = foregroundColor ?? AppColors.ink;
     return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.ink,
+        foregroundColor: fg,
         backgroundColor: Colors.white,
         disabledForegroundColor: AppColors.softMute,
-        side: const BorderSide(color: AppColors.line),
+        side: BorderSide(
+          color: foregroundColor != null
+              ? const Color(0xFFCFE4F6)
+              : AppColors.line,
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         minimumSize: Size.zero,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,

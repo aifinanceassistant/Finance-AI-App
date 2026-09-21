@@ -75,6 +75,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
   List<FilterRule> _filterRules = [];
   List<SortRule> _sortRules = [];
   String _search = '';
+  var _showStats = false;
   var _groupByInstitution = true;
   final _expandedInstitutions = <String>{};
 
@@ -99,7 +100,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
     return applySort(filtered, _sortRules, _accountValue);
   }
 
-  List<({String institution, List<DemoAccount> accounts, double total})>
+  List<({String institution, List<DemoAccount> accounts, String totalLabel})>
       _institutionGroups(List<DemoAccount> filtered) {
     final order = <String>[];
     final map = <String, List<DemoAccount>>{};
@@ -116,9 +117,25 @@ class _AccountsScreenState extends State<AccountsScreen> {
         (
           institution: institution,
           accounts: map[institution]!,
-          total: map[institution]!.fold<double>(0, (s, a) => s + a.balance),
+          totalLabel: _groupTotalLabel(map[institution]!),
         ),
     ];
+  }
+
+  String _groupTotalLabel(List<DemoAccount> accounts) {
+    final currencies = {
+      for (final a in accounts) a.nativeCurrency,
+    };
+    if (currencies.length == 1) {
+      final code = currencies.first;
+      final total = accounts.fold<double>(
+        0,
+        (s, a) => s + (a.originalBalance ?? a.balance),
+      );
+      return moneyNative(total, code);
+    }
+    final totalUsd = accounts.fold<double>(0, (s, a) => s + a.balance);
+    return money(totalUsd);
   }
 
   Future<void> _refreshAll() async {
@@ -796,46 +813,50 @@ class _AccountsScreenState extends State<AccountsScreen> {
             searchHint: 'Search accounts…',
             onRulesChanged: (rules) => setState(() => _filterRules = rules),
             onSortsChanged: (sorts) => setState(() => _sortRules = sorts),
+            showStats: _showStats,
+            onShowStatsChanged: (v) => setState(() => _showStats = v),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: DashPanel(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Total balance',
-                  style: TextStyle(
-                    color: AppColors.mute,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+        if (_showStats) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: DashPanel(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Total balance',
+                    style: TextStyle(
+                      color: AppColors.mute,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  money(total),
-                  style: const TextStyle(
-                    color: AppColors.ink,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.6,
+                  const SizedBox(height: 6),
+                  Text(
+                    money(total),
+                    style: const TextStyle(
+                      color: AppColors.ink,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.6,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Across ${filtered.length} of ${_accounts.length} linked accounts',
-                  style: const TextStyle(
-                    color: AppColors.softMute,
-                    fontSize: 13,
+                  const SizedBox(height: 4),
+                  Text(
+                    'Across ${filtered.length} of ${_accounts.length} linked accounts',
+                    style: const TextStyle(
+                      color: AppColors.softMute,
+                      fontSize: 13,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 16),
+          const SizedBox(height: 16),
+        ],
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: DashPanel(
@@ -958,7 +979,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                                 ),
                               ),
                               Text(
-                                money(group.total),
+                                group.totalLabel,
                                 style: const TextStyle(
                                   color: AppColors.ink,
                                   fontSize: 12,
