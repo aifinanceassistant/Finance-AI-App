@@ -76,6 +76,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
   List<SortRule> _sortRules = [];
   String _search = '';
   var _groupByInstitution = true;
+  final _expandedInstitutions = <String>{};
 
   AccountsController get _ctrl => AccountsScope.of(context);
 
@@ -899,53 +900,79 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   )
                 else if (_groupByInstitution)
                   for (final group in _institutionGroups(filtered)) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF8FAFC),
-                        border: Border(top: BorderSide(color: AppColors.line)),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text.rich(
-                              TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: group.institution,
-                                    style: const TextStyle(
-                                      color: AppColors.ink,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text:
-                                        '  ${group.accounts.length} account${group.accounts.length == 1 ? '' : 's'}',
-                                    style: const TextStyle(
-                                      color: AppColors.softMute,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
+                    Material(
+                      color: const Color(0xFFF8FAFC),
+                      child: InkWell(
+                        onTap: () => setState(() {
+                          if (_expandedInstitutions.contains(
+                            group.institution,
+                          )) {
+                            _expandedInstitutions.remove(group.institution);
+                          } else {
+                            _expandedInstitutions.add(group.institution);
+                          }
+                        }),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(12, 10, 16, 10),
+                          decoration: const BoxDecoration(
+                            border: Border(
+                              top: BorderSide(color: AppColors.line),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _expandedInstitutions.contains(
+                                      group.institution,
+                                    )
+                                    ? Icons.expand_more_rounded
+                                    : Icons.chevron_right_rounded,
+                                size: 18,
+                                color: AppColors.softMute,
                               ),
-                            ),
+                              const SizedBox(width: 2),
+                              Expanded(
+                                child: Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: group.institution,
+                                        style: const TextStyle(
+                                          color: AppColors.ink,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text:
+                                            '  ${group.accounts.length} account${group.accounts.length == 1 ? '' : 's'}',
+                                        style: const TextStyle(
+                                          color: AppColors.softMute,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                money(group.total),
+                                style: const TextStyle(
+                                  color: AppColors.ink,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
                           ),
-                          Text(
-                            money(group.total),
-                            style: const TextStyle(
-                              color: AppColors.ink,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                    for (final a in group.accounts)
-                      _buildAccountTile(a, hideInstitution: true),
+                    if (_expandedInstitutions.contains(group.institution))
+                      for (final a in group.accounts)
+                        _buildAccountTile(a, hideInstitution: true),
                   ]
                 else
                   for (final a in filtered) _buildAccountTile(a),
