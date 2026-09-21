@@ -116,6 +116,8 @@ class DemoAccount {
     this.defaultCurrency,
     required this.status,
     required this.synced,
+    this.provider = 'manual',
+    this.connectionId,
   });
 
   final String? id;
@@ -133,6 +135,8 @@ class DemoAccount {
   final String? defaultCurrency;
   final TxnStatus status;
   final String synced;
+  final String provider;
+  final String? connectionId;
 
   String get displayName {
     final n = name?.trim() ?? '';
@@ -167,6 +171,8 @@ class DemoAccount {
     String? defaultCurrency,
     TxnStatus? status,
     String? synced,
+    String? provider,
+    String? connectionId,
   }) {
     return DemoAccount(
       id: id ?? this.id,
@@ -181,6 +187,8 @@ class DemoAccount {
       defaultCurrency: defaultCurrency ?? this.defaultCurrency,
       status: status ?? this.status,
       synced: synced ?? this.synced,
+      provider: provider ?? this.provider,
+      connectionId: connectionId ?? this.connectionId,
     );
   }
 }

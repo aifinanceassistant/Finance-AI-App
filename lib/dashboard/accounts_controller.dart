@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../auth/auth_controller.dart';
 import 'data.dart';
 import 'fx_prefetch.dart';
+import '../providers/plaid_link_flow.dart';
 
 class AccountsController extends ChangeNotifier {
   AccountsController(this._auth);
@@ -86,6 +87,8 @@ class AccountsController extends ChangeNotifier {
               : null,
       status: connected ? TxnStatus.succeeded : TxnStatus.failed,
       synced: _syncLabel(json['lastSyncedAt'] as String?),
+      provider: (json['provider'] as String?) == 'plaid' ? 'plaid' : 'manual',
+      connectionId: json['connectionId'] as String?,
     );
   }
 
@@ -219,6 +222,24 @@ class AccountsController extends ChangeNotifier {
       return;
     }
 
+    final connectionIds = <String>{
+      for (final a in _accounts)
+        if (a.connectionId != null && a.connectionId!.isNotEmpty)
+          a.connectionId!,
+    };
+
+    if (connectionIds.isNotEmpty) {
+      for (final id in connectionIds) {
+        try {
+          await _auth.apiDecode('POST', '/api/providers/connections/$id');
+        } catch (e) {
+          debugPrint('sync connection $id: $e');
+        }
+      }
+      await loadForSpace(_spaceId);
+      return;
+    }
+
     final next = <DemoAccount>[];
     for (final a in _accounts) {
       if (a.id == null) {
@@ -240,40 +261,64 @@ class AccountsController extends ChangeNotifier {
     _publish();
   }
 
-  Future<void> reconnect(String key) async {
+  Future<({String institutionName, int count})?> reconnect(String key) async {
     final target = _findByKey(key);
-    if (target == null) return;
+    if (target == null) return null;
 
-    if (_auth.isFake || target.id == null) {
-      _accounts = [
-        for (final a in _accounts)
-          if (accountKey(a) == key)
-            a.copyWith(status: TxnStatus.succeeded, synced: 'Just now')
-          else
-            a,
-      ];
-      _publish();
-      return;
+    if (target.connectionId != null &&
+        target.connectionId!.isNotEmpty &&
+        target.provider == 'plaid') {
+      if (_auth.isFake) {
+        await syncOne(key);
+        return (institutionName: target.bank, count: 1);
+      }
+      final flow = PlaidLinkFlow(_auth);
+      final result = await flow.reconnect(
+        portfolioId: _spaceId,
+        connectionId: target.connectionId!,
+      );
+      if (result == null) return null;
+      await loadForSpace(_spaceId);
+      return (
+        institutionName: result.institutionName,
+        count: result.created + result.updated,
+      );
     }
 
-    final decoded = await _auth.apiDecode(
-      'PATCH',
-      '/api/accounts/${target.id}',
-      body: {'connected': true, 'touchSync': true},
+    if (target.provider == 'plaid') {
+      throw Exception(
+        'This account is missing its bank link. Connect the bank again.',
+      );
+    }
+
+    throw Exception(
+      'Manual accounts can’t reconnect. Use Connect with Plaid to sync live balances.',
     );
-    if (decoded is Map<String, dynamic>) {
-      final updated = fromJson(decoded);
-      _accounts = [
-        for (final a in _accounts)
-          if (accountKey(a) == key) updated else a,
-      ];
-      _publish();
-    }
   }
 
   Future<void> syncOne(String key) async {
     final target = _findByKey(key);
     if (target == null) return;
+
+    if (target.connectionId != null && target.connectionId!.isNotEmpty) {
+      if (_auth.isFake) {
+        _accounts = [
+          for (final a in _accounts)
+            if (a.connectionId == target.connectionId)
+              a.copyWith(synced: 'Just now', status: TxnStatus.succeeded)
+            else
+              a,
+        ];
+        _publish();
+        return;
+      }
+      await _auth.apiDecode(
+        'POST',
+        '/api/providers/connections/${target.connectionId}',
+      );
+      await loadForSpace(_spaceId);
+      return;
+    }
 
     if (_auth.isFake || target.id == null) {
       _accounts = [
@@ -305,6 +350,80 @@ class AccountsController extends ChangeNotifier {
       ];
       _publish();
     }
+  }
+
+  /// Link a bank via Plaid (one connection → many accounts).
+  Future<({String institutionName, int count})?> linkWithPlaid() async {
+    if (_spaceId.isEmpty) return null;
+    final flow = PlaidLinkFlow(_auth);
+    final result = await flow.connect(portfolioId: _spaceId);
+    if (result == null) return null;
+    await loadForSpace(_spaceId);
+    return (
+      institutionName: result.institutionName,
+      count: result.created + result.updated,
+    );
+  }
+
+  /// Search Plaid (or local) institution catalog for Connect bank.
+  Future<List<({String id, String name, List<String> countries})>>
+      searchInstitutions(String query) async {
+    final q = query.trim();
+    final path = q.isEmpty
+        ? '/api/providers/plaid/institutions'
+        : '/api/providers/plaid/institutions?q=${Uri.encodeQueryComponent(q)}';
+    final decoded = await _auth.apiDecode('GET', path);
+    if (decoded is! Map<String, dynamic>) {
+      // Offline / fake fallback
+      final lower = q.toLowerCase();
+      final names = q.isEmpty
+          ? <String>[
+              'Chase',
+              'Amex',
+              'Fidelity',
+              'Bank of America',
+              'Capital One',
+              'Schwab',
+              'Vanguard',
+              'Wells Fargo',
+            ]
+          : <String>[
+              'Chase',
+              'Amex',
+              'Fidelity',
+              'Bank of America',
+              'Capital One',
+              'Schwab',
+              'Vanguard',
+              'Wells Fargo',
+              'Citibank',
+              'Discover',
+              'Ally',
+              'USAA',
+              'Robinhood',
+              'Wealthfront',
+              'Coinbase',
+              'Venmo',
+              'Cash',
+            ].where((n) => n.toLowerCase().contains(lower));
+      return [
+        for (final name in names) (id: 'local:$name', name: name, countries: <String>[]),
+      ];
+    }
+    final list = decoded['institutions'];
+    if (list is! List) return [];
+    return [
+      for (final raw in list)
+        if (raw is Map)
+          (
+            id: (raw['id'] as String?) ?? '',
+            name: (raw['name'] as String?) ?? '',
+            countries: [
+              for (final c in (raw['countryCodes'] as List? ?? const []))
+                if (c is String) c,
+            ],
+          ),
+    ].where((e) => e.name.isNotEmpty).toList();
   }
 
   Future<DemoAccount?> update({
