@@ -13,6 +13,7 @@ import '../filter_sort.dart';
 import '../shimmer.dart';
 import '../transactions_controller.dart';
 import '../transactions_scope.dart';
+import '../spaces_scope.dart';
 import '../ui.dart';
 
 const _filterFields = [
@@ -1165,7 +1166,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                             : 'All payments across linked accounts',
                     actions: [
                       GhostButton(label: 'Export CSV', onPressed: _exportCsv),
-                      AccentButton(label: 'Add', onPressed: _openAddSheet),
+                      AccentButton(
+                        label: 'Add',
+                        onPressed: SpacesScope.maybeOf(context)
+                                    ?.can('transactions', 'write') ==
+                                false
+                            ? null
+                            : _openAddSheet,
+                      ),
                     ],
                   ),
                   if (_ctrl.loading)

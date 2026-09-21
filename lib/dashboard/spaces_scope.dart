@@ -15,6 +15,11 @@ class SpacesScope extends InheritedNotifier<SpacesController> {
     return scope!.notifier!;
   }
 
+  static SpacesController? maybeOf(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<SpacesScope>();
+    return scope?.notifier;
+  }
+
   static SpacesController read(BuildContext context) {
     final scope = context.getInheritedWidgetOfExactType<SpacesScope>();
     assert(scope != null, 'SpacesScope not found');

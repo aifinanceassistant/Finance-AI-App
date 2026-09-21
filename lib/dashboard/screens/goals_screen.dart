@@ -8,6 +8,7 @@ import '../filter_sort.dart';
 import '../goals_controller.dart';
 import '../goals_scope.dart';
 import '../shimmer.dart';
+import '../spaces_scope.dart';
 import '../ui.dart';
 
 const _filterFields = [
@@ -348,7 +349,10 @@ class _GoalsScreenState extends State<GoalsScreen> {
               ),
               AccentButton(
                 label: 'New goal',
-                onPressed: _openNewGoalSheet,
+                onPressed:
+                    SpacesScope.maybeOf(context)?.can('goals', 'write') == false
+                        ? null
+                        : _openNewGoalSheet,
               ),
             ],
           ),

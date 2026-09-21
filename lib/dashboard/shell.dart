@@ -24,6 +24,7 @@ import 'screens/recurring_screen.dart';
 import 'screens/reports_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/transactions_screen.dart';
+import 'screens/users_permissions_screen.dart';
 import 'space_switcher_bar.dart';
 import 'spaces.dart';
 import 'spaces_scope.dart';
@@ -153,23 +154,36 @@ class _DashboardShellState extends State<DashboardShell> {
     _pages.jumpToPage(tab.index);
   }
 
+  Widget _withSpaces(Widget child) {
+    final spaces = _spaces ?? SpacesController.fake();
+    return SpacesScope(controller: spaces, child: child);
+  }
+
   void _openGoals({
     bool openContribute = false,
     String? contributeGoalName,
   }) {
+    final spaces = _spaces ?? SpacesController.fake();
+    if (!spaces.hasFeature('goals')) {
+      _openSettings(section: 'plan');
+      toast(context, 'Upgrade to unlock Goals');
+      return;
+    }
     final style = DashVariantStyle.forVariation(
       VariationScope.read(context).dashboard,
     );
     final goals = _goals ?? GoalsController.fake();
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => GoalsScope(
-          controller: goals,
-          child: DashStyleScope(
-            style: style,
-            child: GoalsScreen(
-              openContributeOnStart: openContribute,
-              contributeGoalName: contributeGoalName,
+        builder: (_) => _withSpaces(
+          GoalsScope(
+            controller: goals,
+            child: DashStyleScope(
+              style: style,
+              child: GoalsScreen(
+                openContributeOnStart: openContribute,
+                contributeGoalName: contributeGoalName,
+              ),
             ),
           ),
         ),
@@ -183,9 +197,11 @@ class _DashboardShellState extends State<DashboardShell> {
     );
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => DashStyleScope(
-          style: style,
-          child: const ReportsScreen(),
+        builder: (_) => _withSpaces(
+          DashStyleScope(
+            style: style,
+            child: const ReportsScreen(),
+          ),
         ),
       ),
     );
@@ -198,11 +214,13 @@ class _DashboardShellState extends State<DashboardShell> {
     final recurring = _recurring ?? RecurringController.fake();
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => RecurringScope(
-          controller: recurring,
-          child: DashStyleScope(
-            style: style,
-            child: const RecurringScreen(),
+        builder: (_) => _withSpaces(
+          RecurringScope(
+            controller: recurring,
+            child: DashStyleScope(
+              style: style,
+              child: const RecurringScreen(),
+            ),
           ),
         ),
       ),
@@ -210,17 +228,25 @@ class _DashboardShellState extends State<DashboardShell> {
   }
 
   void _openInvestments() {
+    final spaces = _spaces ?? SpacesController.fake();
+    if (!spaces.hasFeature('investments')) {
+      _openSettings(section: 'plan');
+      toast(context, 'Upgrade to unlock Investments');
+      return;
+    }
     final style = DashVariantStyle.forVariation(
       VariationScope.read(context).dashboard,
     );
     final investments = _investments ?? InvestmentsController.fake();
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => InvestmentsScope(
-          controller: investments,
-          child: DashStyleScope(
-            style: style,
-            child: const InvestmentsScreen(),
+        builder: (_) => _withSpaces(
+          InvestmentsScope(
+            controller: investments,
+            child: DashStyleScope(
+              style: style,
+              child: const InvestmentsScreen(),
+            ),
           ),
         ),
       ),
@@ -233,11 +259,29 @@ class _DashboardShellState extends State<DashboardShell> {
     );
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => DashStyleScope(
-          style: style,
-          child: SettingsScreen(
-            onLogout: _confirmLogout,
-            initialSection: section,
+        builder: (_) => _withSpaces(
+          DashStyleScope(
+            style: style,
+            child: SettingsScreen(
+              onLogout: _confirmLogout,
+              initialSection: section,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openUsersPermissions() {
+    final style = DashVariantStyle.forVariation(
+      VariationScope.read(context).dashboard,
+    );
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _withSpaces(
+          DashStyleScope(
+            style: style,
+            child: const UsersPermissionsScreen(),
           ),
         ),
       ),
@@ -428,9 +472,13 @@ class _DashboardShellState extends State<DashboardShell> {
                                 onGoals: _openGoals,
                                 onReports: _openReports,
                                 onSettings: _openSettings,
+                                onUsersPermissions: _openUsersPermissions,
                                 onManagePlan: () =>
                                     _openSettings(section: 'plan'),
                                 onLogout: _confirmLogout,
+                                showGoals: spaces.hasFeature('goals'),
+                                showInvestments:
+                                    spaces.hasFeature('investments'),
                               ),
                             ],
                           ),

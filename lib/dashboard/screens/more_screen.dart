@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 import '../dash_sheets.dart';
+import '../spaces_scope.dart';
 import '../ui.dart';
 
 class MoreScreen extends StatelessWidget {
@@ -14,6 +15,9 @@ class MoreScreen extends StatelessWidget {
     required this.onSettings,
     required this.onManagePlan,
     required this.onLogout,
+    this.onUsersPermissions,
+    this.showGoals = true,
+    this.showInvestments = true,
   });
 
   final VoidCallback onRecurring;
@@ -23,6 +27,9 @@ class MoreScreen extends StatelessWidget {
   final VoidCallback onSettings;
   final VoidCallback onManagePlan;
   final VoidCallback onLogout;
+  final VoidCallback? onUsersPermissions;
+  final bool showGoals;
+  final bool showInvestments;
 
   Future<void> _openHelpSheet(BuildContext context) async {
     await showDashSheet<void>(
@@ -87,6 +94,11 @@ class MoreScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final spaces = SpacesScope.maybeOf(context);
+    final goalsUnlocked = showGoals || (spaces?.hasFeature('goals') ?? false);
+    final investmentsUnlocked =
+        showInvestments || (spaces?.hasFeature('investments') ?? false);
+
     return ListView(
       padding: const EdgeInsets.only(bottom: 28),
       children: [
@@ -158,24 +170,47 @@ class MoreScreen extends StatelessWidget {
                   onTap: onRecurring,
                   showDivider: false,
                 ),
-                _NavTile(
-                  icon: Icons.trending_up_rounded,
-                  title: 'Investments',
-                  subtitle: 'Brokerage and crypto holdings',
-                  onTap: onInvestments,
-                ),
-                _NavTile(
-                  icon: Icons.flag_outlined,
-                  title: 'Goals',
-                  subtitle: 'Emergency fund, trips, and more',
-                  onTap: onGoals,
-                ),
+                if (investmentsUnlocked)
+                  _NavTile(
+                    icon: Icons.trending_up_rounded,
+                    title: 'Investments',
+                    subtitle: 'Brokerage and crypto holdings',
+                    onTap: onInvestments,
+                  )
+                else
+                  _NavTile(
+                    icon: Icons.lock_outline_rounded,
+                    title: 'Investments',
+                    subtitle: 'Upgrade to Plus to unlock',
+                    onTap: onManagePlan,
+                  ),
+                if (goalsUnlocked)
+                  _NavTile(
+                    icon: Icons.flag_outlined,
+                    title: 'Goals',
+                    subtitle: 'Emergency fund, trips, and more',
+                    onTap: onGoals,
+                  )
+                else
+                  _NavTile(
+                    icon: Icons.lock_outline_rounded,
+                    title: 'Goals',
+                    subtitle: 'Upgrade to Plus to unlock',
+                    onTap: onManagePlan,
+                  ),
                 _NavTile(
                   icon: Icons.insights_outlined,
                   title: 'Reports',
                   subtitle: 'Cash flow and category insights',
                   onTap: onReports,
                 ),
+                if (onUsersPermissions != null)
+                  _NavTile(
+                    icon: Icons.group_outlined,
+                    title: 'Users & permissions',
+                    subtitle: 'Invite members and set roles',
+                    onTap: onUsersPermissions!,
+                  ),
                 _NavTile(
                   icon: Icons.settings_outlined,
                   title: 'Settings',

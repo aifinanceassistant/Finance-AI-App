@@ -3,10 +3,13 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../auth/auth_controller.dart';
 
-/// Starts Stripe Checkout (Solo) via the web API and opens the returned URL.
+/// Starts Stripe Checkout via the web API and opens the returned URL.
+///
+/// [plan] is `solo` | `team` | `family` (web plan slugs).
 Future<String?> startStripeCheckout(
   AuthController auth, {
   required String billing,
+  String plan = 'solo',
 }) async {
   if (auth.isFake) return null;
   try {
@@ -14,7 +17,7 @@ Future<String?> startStripeCheckout(
       'POST',
       '/api/billing/checkout',
       body: {
-        'plan': 'solo',
+        'plan': plan,
         'billing': billing,
         'accounts': 1,
       },

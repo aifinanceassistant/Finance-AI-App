@@ -10,6 +10,7 @@ import '../filter_sort.dart';
 import '../investments_controller.dart';
 import '../investments_scope.dart';
 import '../shimmer.dart';
+import '../spaces_scope.dart';
 import '../ui.dart';
 
 const _filterFields = [
@@ -371,7 +372,11 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
               GhostButton(label: 'Sync brokers', onPressed: _syncBrokers),
               AccentButton(
                 label: 'Add holding',
-                onPressed: _openAddHoldingSheet,
+                onPressed: SpacesScope.maybeOf(context)
+                            ?.can('investments', 'write') ==
+                        false
+                    ? null
+                    : _openAddHoldingSheet,
               ),
             ],
           ),

@@ -6,6 +6,7 @@ import '../categories_scope.dart';
 import '../data.dart';
 import '../filter_sort.dart';
 import '../shimmer.dart';
+import '../spaces_scope.dart';
 import '../ui.dart';
 
 const _categoryFilterFields = [
@@ -1496,7 +1497,11 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               GhostButton(label: 'Rules', onPressed: _openRules),
               AccentButton(
                 label: 'New category',
-                onPressed: () => _openEditor(),
+                onPressed: SpacesScope.maybeOf(context)
+                            ?.can('categories', 'write') ==
+                        false
+                    ? null
+                    : () => _openEditor(),
               ),
             ],
           ),
@@ -1809,11 +1814,19 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                             needsImport
                                 ? AccentButton(
                                     label: 'Import defaults',
-                                    onPressed: _importDefaults,
+                                    onPressed: SpacesScope.maybeOf(context)
+                                                ?.can('categories', 'write') ==
+                                            false
+                                        ? null
+                                        : _importDefaults,
                                   )
                                 : GhostButton(
                                     label: 'New category',
-                                    onPressed: () => _openEditor(),
+                                    onPressed: SpacesScope.maybeOf(context)
+                                                ?.can('categories', 'write') ==
+                                            false
+                                        ? null
+                                        : () => _openEditor(),
                                   )
                           else
                             GhostButton(

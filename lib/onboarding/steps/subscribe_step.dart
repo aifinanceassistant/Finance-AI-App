@@ -7,6 +7,7 @@ import '../onboarding_shell.dart';
 
 const _validCodes = {'FRIEND', 'WELCOME', 'FINANCEAI', 'PLUS2026'};
 
+/// Plan cards use web slugs: solo | team | family.
 class SubscribeStep extends StatefulWidget {
   const SubscribeStep({
     super.key,
@@ -22,7 +23,8 @@ class SubscribeStep extends StatefulWidget {
 }
 
 class _SubscribeStepState extends State<SubscribeStep> {
-  String _plan = 'plus-yearly';
+  String _plan = 'team';
+  String _billing = 'yearly';
   final _referral = TextEditingController();
   String? _referralMessage;
   bool _accepted = false;
@@ -53,7 +55,8 @@ class _SubscribeStepState extends State<SubscribeStep> {
     await auth.completeOnboarding();
     final err = await startStripeCheckout(
       auth,
-      billing: _plan == 'plus-yearly' ? 'yearly' : 'monthly',
+      billing: _billing,
+      plan: _plan,
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -117,20 +120,50 @@ class _SubscribeStepState extends State<SubscribeStep> {
                   height: 1.4,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _BillingChip(
+                      label: 'Yearly',
+                      selected: _billing == 'yearly',
+                      onTap: () => setState(() => _billing = 'yearly'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _BillingChip(
+                      label: 'Monthly',
+                      selected: _billing == 'monthly',
+                      onTap: () => setState(() => _billing = 'monthly'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
               _PlanCard(
-                selected: _plan == 'plus-yearly',
-                title: 'Plus yearly',
-                price: _accepted ? '\$39.92/yr' : '\$49.90/yr',
-                badge: 'Best value',
-                onTap: () => setState(() => _plan = 'plus-yearly'),
+                selected: _plan == 'solo',
+                title: 'Starter',
+                price: _billing == 'yearly' ? '\$49.90/yr' : '\$4.99/mo',
+                subtitle: '1 space · essential budgeting',
+                onTap: () => setState(() => _plan = 'solo'),
               ),
               const SizedBox(height: 10),
               _PlanCard(
-                selected: _plan == 'plus-monthly',
-                title: 'Plus monthly',
-                price: _accepted ? '\$3.99/mo' : '\$4.99/mo',
-                onTap: () => setState(() => _plan = 'plus-monthly'),
+                selected: _plan == 'team',
+                title: 'Plus',
+                price: _billing == 'yearly' ? '\$99.90/yr' : '\$9.99/mo',
+                badge: 'Popular',
+                subtitle: 'Goals, AI, invites · up to 5 spaces',
+                onTap: () => setState(() => _plan = 'team'),
+              ),
+              const SizedBox(height: 10),
+              _PlanCard(
+                selected: _plan == 'family',
+                title: 'Family',
+                price: _billing == 'yearly' ? '\$149.90/yr' : '\$14.99/mo',
+                subtitle: 'Share spaces · up to 5 members',
+                onTap: () => setState(() => _plan = 'family'),
               ),
               const SizedBox(height: 18),
               const Text(
@@ -193,7 +226,7 @@ class _SubscribeStepState extends State<SubscribeStep> {
                 child: const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _TimelineRow(title: 'Today', body: 'Full Plus access starts.'),
+                    _TimelineRow(title: 'Today', body: 'Full access starts.'),
                     _TimelineRow(
                       title: 'In 7 days',
                       body: 'We remind you before the trial ends.',
@@ -220,6 +253,48 @@ class _SubscribeStepState extends State<SubscribeStep> {
   }
 }
 
+class _BillingChip extends StatelessWidget {
+  const _BillingChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.ink : Colors.white,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? AppColors.ink : const Color(0xFFE0E6EE),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? Colors.white : AppColors.ink,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PlanCard extends StatelessWidget {
   const _PlanCard({
     required this.selected,
@@ -227,12 +302,14 @@ class _PlanCard extends StatelessWidget {
     required this.price,
     required this.onTap,
     this.badge,
+    this.subtitle,
   });
 
   final bool selected;
   final String title;
   final String price;
   final String? badge;
+  final String? subtitle;
   final VoidCallback onTap;
 
   @override
@@ -298,6 +375,16 @@ class _PlanCard extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: const TextStyle(
+                          color: AppColors.softMute,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

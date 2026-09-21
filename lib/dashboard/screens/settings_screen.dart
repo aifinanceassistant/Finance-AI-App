@@ -9,7 +9,9 @@ import '../../theme/app_theme.dart';
 import '../../variations/models.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
+import '../spaces_scope.dart';
 import '../ui.dart';
+import 'users_permissions_screen.dart';
 
 const _appVersion = '26.9.8+1521 (Build: 981)';
 
@@ -17,6 +19,7 @@ const _sections = [
   ('general', 'General'),
   ('profile', 'Profile'),
   ('preferences', 'Preferences'),
+  ('users-permissions', 'Users & permissions'),
   ('account', 'Account'),
   ('security', 'Security'),
   ('plan', 'Plan'),
@@ -52,9 +55,9 @@ const _spaceSwitcherOptions = [
 ];
 
 const _planTiers = [
-  ('plus-yearly', 'Plus yearly', r'$49.90/yr', 'Best value'),
-  ('plus-monthly', 'Plus monthly', r'$4.99/mo', null),
-  ('plus-family', 'Plus Family', r'$14.99/mo', 'Current'),
+  ('solo', 'Starter', r'$4.99/mo', '1 space'),
+  ('team', 'Plus', r'$9.99/mo', 'Popular'),
+  ('family', 'Family', r'$14.99/mo', 'Up to 5 members'),
 ];
 
 class SettingsScreen extends StatefulWidget {
@@ -83,7 +86,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _transactionsFoldingMode = true;
   bool _twoFa = true;
   bool _shareAnalytics = false;
-  String _planId = 'plus-family';
+  String _planId = 'team';
   String _planLabel = 'No active plan';
   String _planSubtitle = 'Start a free trial to unlock Plus';
   bool _subscriptionActive = false;
@@ -206,7 +209,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  Future<void> _manageBilling() async {
+  Future<void> _manageBilling({String plan = 'team'}) async {
     final auth = AuthScope.read(context);
     if (_subscriptionActive) {
       final err = await openStripeBillingPortal(auth);
@@ -214,7 +217,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (err != null) toast(context, err);
       return;
     }
-    final err = await startStripeCheckout(auth, billing: 'yearly');
+    final err = await startStripeCheckout(
+      auth,
+      billing: 'yearly',
+      plan: plan,
+    );
     if (!mounted) return;
     if (err != null) toast(context, err);
   }
@@ -286,6 +293,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return _profileBody();
       case 'preferences':
         return _preferencesBody();
+      case 'users-permissions':
+        return _usersPermissionsBody();
       case 'account':
         return _accountBody();
       case 'security':
@@ -304,6 +313,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
       default:
         return _generalBody();
     }
+  }
+
+  Widget _usersPermissionsBody() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Manage who can access this space and what they can do.',
+          style: TextStyle(color: AppColors.mute, fontSize: 13, height: 1.4),
+        ),
+        const SizedBox(height: 14),
+        AccentButton(
+          label: 'Open users & permissions',
+          onPressed: () {
+            final spaces = SpacesScope.maybeOf(context);
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => spaces != null
+                    ? SpacesScope(
+                        controller: spaces,
+                        child: const UsersPermissionsScreen(),
+                      )
+                    : const UsersPermissionsScreen(),
+              ),
+            );
+          },
+        ),
+      ],
+    );
   }
 
   Widget _generalBody() {
@@ -729,7 +767,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   AccentButton(
                     label: _subscriptionActive ? 'Manage' : 'Subscribe',
-                    onPressed: _manageBilling,
+                    onPressed: () => _manageBilling(plan: _planId),
                   ),
                 ],
               ),
@@ -741,9 +779,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
           title: 'Payment & invoices',
           body: 'Update card, cancel, or download receipts in Stripe',
           action: 'Open',
-          onTap: _manageBilling,
+          onTap: () => _manageBilling(plan: _planId),
           showDivider: false,
         ),
+        const SizedBox(height: 12),
+        for (final tier in _planTiers) ...[
+          Material(
+            color: _planId == tier.$1
+                ? AppColors.brand.withValues(alpha: 0.08)
+                : AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => setState(() => _planId = tier.$1),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _planId == tier.$1
+                        ? AppColors.brand
+                        : AppColors.line,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tier.$2,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            tier.$3,
+                            style: const TextStyle(
+                              color: AppColors.mute,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      tier.$4,
+                      style: const TextStyle(
+                        color: AppColors.brand,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        if (!_subscriptionActive)
+          AccentButton(
+            label: 'Start ${_planTiers.firstWhere((t) => t.$1 == _planId).$2}',
+            onPressed: () => _manageBilling(plan: _planId),
+          ),
       ],
     );
   }
@@ -1358,15 +1460,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ],
                           ),
                         ),
-                        if (tier.$4 != null)
-                          Text(
-                            tier.$4!,
-                            style: TextStyle(
-                              color: AppColors.brand,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
+                        Text(
+                          tier.$4,
+                          style: TextStyle(
+                            color: AppColors.brand,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
                           ),
+                        ),
                         const SizedBox(width: 8),
                         Icon(
                           selected == tier.$1

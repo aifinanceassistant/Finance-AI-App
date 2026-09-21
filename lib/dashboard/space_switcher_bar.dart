@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'screens/users_permissions_screen.dart';
 import 'shimmer.dart';
 import 'spaces.dart';
 import 'spaces_scope.dart';
+import 'ui.dart';
 
 /// Horizontal space chips under the status bar.
 class SpaceSwitcherBar extends StatelessWidget {
@@ -61,6 +63,14 @@ class SpaceSwitcherBar extends StatelessWidget {
     BuildContext context,
     SpacesController spaces,
   ) async {
+    if (!spaces.canCreateSpace) {
+      toast(
+        context,
+        'Space limit reached (${spaces.spaces.length}/${spaces.selfEntitlements.maxSpaces}). Upgrade your plan.',
+      );
+      return;
+    }
+
     final controller = TextEditingController();
     final name = await showDialog<String>(
       context: context,
@@ -96,7 +106,10 @@ class SpaceSwitcherBar extends StatelessWidget {
     ).hasMatch(lower)
         ? 'Business'
         : 'Personal';
-    await spaces.create(name: name, type: type);
+    final created = await spaces.create(name: name, type: type);
+    if (created == null && context.mounted) {
+      toast(context, 'Could not create space');
+    }
   }
 
   Future<void> _promptManage(
@@ -104,6 +117,14 @@ class SpaceSwitcherBar extends StatelessWidget {
     SpacesController spaces,
     Space space,
   ) async {
+    final isActive = space.id == spaces.spaceId;
+    final canRename = isActive
+        ? (spaces.isOwner || spaces.can('settings', 'write'))
+        : (space.isOwner == true || space.role == 'owner');
+    final canDelete = isActive
+        ? spaces.canDeleteSpace
+        : (space.canDeleteSpace == true || space.isOwner == true);
+
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (context) {
@@ -116,11 +137,17 @@ class SpaceSwitcherBar extends StatelessWidget {
                 subtitle: Text(space.type),
               ),
               ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Rename'),
-                onTap: () => Navigator.pop(context, 'rename'),
+                leading: const Icon(Icons.group_outlined),
+                title: const Text('Members'),
+                onTap: () => Navigator.pop(context, 'members'),
               ),
-              if (spaces.spaces.length > 1)
+              if (canRename)
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined),
+                  title: const Text('Rename'),
+                  onTap: () => Navigator.pop(context, 'rename'),
+                ),
+              if (canDelete && spaces.spaces.length > 1)
                 ListTile(
                   leading: const Icon(Icons.delete_outline, color: AppColors.danger),
                   title: const Text(
@@ -135,7 +162,20 @@ class SpaceSwitcherBar extends StatelessWidget {
       },
     );
     if (!context.mounted || action == null) return;
-    if (action == 'rename') {
+    if (action == 'members') {
+      if (space.id != spaces.spaceId) {
+        await spaces.select(space.id);
+      }
+      if (!context.mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => SpacesScope(
+            controller: spaces,
+            child: const UsersPermissionsScreen(),
+          ),
+        ),
+      );
+    } else if (action == 'rename') {
       final controller = TextEditingController(text: space.name);
       final name = await showDialog<String>(
         context: context,

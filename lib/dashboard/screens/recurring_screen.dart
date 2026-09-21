@@ -8,6 +8,7 @@ import '../filter_sort.dart';
 import '../recurring_controller.dart';
 import '../recurring_scope.dart';
 import '../shimmer.dart';
+import '../spaces_scope.dart';
 import '../ui.dart';
 
 const _filterFields = [
@@ -728,7 +729,11 @@ class _RecurringScreenState extends State<RecurringScreen> {
               GhostButton(label: 'Detect more', onPressed: _detectMore),
               AccentButton(
                 label: 'Add recurring',
-                onPressed: _openAddRecurringSheet,
+                onPressed: SpacesScope.maybeOf(context)
+                            ?.can('recurring', 'write') ==
+                        false
+                    ? null
+                    : _openAddRecurringSheet,
               ),
             ],
           ),

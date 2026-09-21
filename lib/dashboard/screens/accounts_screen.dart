@@ -8,6 +8,7 @@ import '../dash_sheets.dart';
 import '../data.dart';
 import '../filter_sort.dart';
 import '../shimmer.dart';
+import '../spaces_scope.dart';
 import '../ui.dart';
 
 const _filterFields = [
@@ -351,7 +352,13 @@ class _AccountsScreenState extends State<AccountsScreen> {
           subtitle: 'Linked banks and cards',
           actions: [
             GhostButton(label: 'Refresh all', onPressed: _refreshAll),
-            AccentButton(label: 'Connect bank', onPressed: _openConnectSheet),
+            AccentButton(
+              label: 'Connect bank',
+              onPressed: SpacesScope.maybeOf(context)?.can('accounts', 'write') ==
+                      false
+                  ? null
+                  : _openConnectSheet,
+            ),
           ],
         ),
         if (loading)

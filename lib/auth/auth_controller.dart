@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_env.dart';
+import '../billing/entitlements.dart';
 import '../dashboard/data.dart' show DisplayCurrency;
 
 enum AuthDestination { landing, onboarding, dashboard, resetPassword }
@@ -18,6 +19,9 @@ class AuthUser {
     this.name,
     this.onboardingCompleted = false,
     this.currency = 'USD',
+    this.role = 'user',
+    this.subscriptionActive = false,
+    this.entitlements,
   });
 
   final String id;
@@ -25,6 +29,37 @@ class AuthUser {
   final String? name;
   final bool onboardingCompleted;
   final String currency;
+  final String role;
+  final bool subscriptionActive;
+  final Entitlements? entitlements;
+
+  bool get isAppAdmin => isAppAdminRole(role);
+
+  /// Admins are treated as subscribed for feature gates.
+  bool get isEffectivelySubscribed =>
+      isAppAdmin || subscriptionActive || (entitlements?.isSubscribed ?? false);
+
+  AuthUser copyWith({
+    String? id,
+    String? email,
+    String? name,
+    bool? onboardingCompleted,
+    String? currency,
+    String? role,
+    bool? subscriptionActive,
+    Entitlements? entitlements,
+  }) {
+    return AuthUser(
+      id: id ?? this.id,
+      email: email ?? this.email,
+      name: name ?? this.name,
+      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+      currency: currency ?? this.currency,
+      role: role ?? this.role,
+      subscriptionActive: subscriptionActive ?? this.subscriptionActive,
+      entitlements: entitlements ?? this.entitlements,
+    );
+  }
 }
 
 const _rememberKey = 'financeai_remember_me';
@@ -181,12 +216,29 @@ class AuthController extends ChangeNotifier {
       DisplayCurrency.setCode(currency);
       // ignore: discarded_futures
       _refreshDisplayFx(currency);
+
+      final role = (data['role'] as String?)?.trim().isNotEmpty == true
+          ? (data['role'] as String).trim()
+          : base.role;
+      final entitlements = data['entitlements'] != null
+          ? Entitlements.fromJson(data['entitlements'])
+          : base.entitlements;
+      final admin = isAppAdminRole(role);
+      final subscriptionActive = admin ||
+          data['subscription_active'] == true ||
+          (entitlements?.isSubscribed ?? false);
+
       return AuthUser(
         id: base.id,
         email: (data['email'] as String?) ?? base.email,
         name: (data['full_name'] as String?) ?? base.name,
         onboardingCompleted: data['onboarding_completed_at'] != null,
         currency: currency,
+        role: role,
+        subscriptionActive: subscriptionActive,
+        entitlements: admin && entitlements == null
+            ? Entitlements.admin
+            : entitlements,
       );
     } catch (_) {
       return base;
@@ -286,24 +338,14 @@ class AuthController extends ChangeNotifier {
   Future<void> completeOnboarding() async {
     if (isFake) {
       if (_user != null) {
-        _user = AuthUser(
-          id: _user!.id,
-          email: _user!.email,
-          name: _user!.name,
-          onboardingCompleted: true,
-        );
+        _user = _user!.copyWith(onboardingCompleted: true);
         notifyListeners();
       }
       return;
     }
     await _apiJson('PATCH', '/api/profile', body: {'onboarding_completed': true});
     if (_user != null) {
-      _user = AuthUser(
-        id: _user!.id,
-        email: _user!.email,
-        name: _user!.name,
-        onboardingCompleted: true,
-      );
+      _user = _user!.copyWith(onboardingCompleted: true);
       notifyListeners();
     }
   }

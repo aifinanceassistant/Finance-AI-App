@@ -268,10 +268,11 @@ class GhostButton extends StatelessWidget {
     final style = DashStyleScope.maybeOf(context);
     final radius = style?.radius ?? 8;
     return OutlinedButton(
-      onPressed: onPressed ?? () {},
+      onPressed: onPressed,
       style: OutlinedButton.styleFrom(
         foregroundColor: AppColors.ink,
         backgroundColor: Colors.white,
+        disabledForegroundColor: AppColors.softMute,
         side: const BorderSide(color: AppColors.line),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         minimumSize: Size.zero,
@@ -298,10 +299,12 @@ class AccentButton extends StatelessWidget {
     final primary = style?.primary ?? AppColors.accent;
     final radius = style?.radius ?? 8;
     return FilledButton(
-      onPressed: onPressed ?? () {},
+      onPressed: onPressed,
       style: FilledButton.styleFrom(
         backgroundColor: primary,
         foregroundColor: Colors.white,
+        disabledBackgroundColor: primary.withValues(alpha: 0.35),
+        disabledForegroundColor: Colors.white70,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         minimumSize: Size.zero,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
