@@ -19,7 +19,7 @@ class InvestmentsController extends ChangeNotifier {
 
   List<DemoHolding> _holdings = [];
   String _spaceId = '';
-  bool _loading = false;
+  bool _loading = true;
 
   List<DemoHolding> get holdings => List.unmodifiable(_holdings);
   bool get loading => _loading;

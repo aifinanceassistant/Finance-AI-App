@@ -28,62 +28,9 @@ class OnboardingShell extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.asset(
-                      'assets/icon/app_icon.png',
-                      width: 28,
-                      height: 28,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          phase.word,
-                          style: const TextStyle(
-                            color: AppColors.ink,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        Text(
-                          '${index + 1} of ${onboardingOrder.length} · ${phase.hint}',
-                          style: const TextStyle(
-                            color: AppColors.mute,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Steps',
-                    onPressed: () => _openSteps(context, furthestIndex),
-                    icon: const Icon(Icons.menu_rounded, color: AppColors.ink),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(999),
-                child: LinearProgressIndicator(
-                  value: (index + 1) / onboardingOrder.length,
-                  minHeight: 6,
-                  backgroundColor: const Color(0xFFE3E8EE),
-                  color: AppColors.brand,
-                ),
-              ),
+            _MinimalChrome(
+              index: index,
+              onOpenSteps: () => _openSteps(context, furthestIndex),
             ),
             Expanded(child: child),
             SizedBox(height: bottom > 0 ? 0 : 4),
@@ -157,6 +104,86 @@ class OnboardingShell extends StatelessWidget {
   }
 }
 
+class _MinimalChrome extends StatelessWidget {
+  const _MinimalChrome({
+    required this.index,
+    required this.onOpenSteps,
+  });
+
+  final int index;
+  final VoidCallback onOpenSteps;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 12, 4),
+          child: Row(
+            children: [
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: AppColors.brand,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                alignment: Alignment.center,
+                child: const Text(
+                  'F',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Row(
+                  children: [
+                    for (var i = 0; i < onboardingOrder.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 6),
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: i <= index
+                              ? AppColors.brand
+                              : const Color(0xFFD0D5DD),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: onOpenSteps,
+                icon: const Icon(Icons.menu_rounded, size: 22),
+                color: AppColors.ink,
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: (index + 1) / onboardingOrder.length,
+              minHeight: 3,
+              backgroundColor: const Color(0xFFE8ECF1),
+              color: AppColors.brand,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class OnboardingActions extends StatelessWidget {
   const OnboardingActions({
     super.key,
@@ -175,47 +202,57 @@ class OnboardingActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            height: 52,
-            child: FilledButton(
-              onPressed: primaryEnabled ? onPrimary : null,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.brand,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: AppColors.brand.withValues(alpha: 0.4),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              child: Text(
-                primaryLabel,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
+    final primary = SizedBox(
+      height: 44,
+      child: FilledButton(
+        onPressed: primaryEnabled ? onPrimary : null,
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.brand,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: AppColors.brand.withValues(alpha: 0.4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
           ),
-          if (secondaryLabel != null && onSecondary != null) ...[
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: onSecondary,
-              child: Text(
-                secondaryLabel!,
-                style: const TextStyle(
-                  color: AppColors.mute,
-                  fontWeight: FontWeight.w600,
-                ),
+        ),
+        child: Text(
+          primaryLabel,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+
+    final secondary = secondaryLabel != null && onSecondary != null
+        ? TextButton(
+            onPressed: onSecondary,
+            child: Text(
+              secondaryLabel!,
+              style: const TextStyle(
+                color: AppColors.mute,
+                fontWeight: FontWeight.w600,
               ),
             ),
+          )
+        : null;
+
+    if (secondary != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+        child: Row(
+          children: [
+            Expanded(child: secondary),
+            const SizedBox(width: 8),
+            Expanded(flex: 2, child: primary),
           ],
-        ],
-      ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+      child: primary,
     );
   }
 }

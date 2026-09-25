@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../dashboard/shell.dart';
 import 'auth/login_screen.dart';
 import 'auth/register_screen.dart';
+import 'demo_session.dart';
 import 'landing/landing_variants.dart';
 
 class LandingScreen extends StatelessWidget {
@@ -33,7 +33,7 @@ class LandingScreen extends StatelessWidget {
 
   void _goDemo(BuildContext context) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const DashboardShell()),
+      MaterialPageRoute<void>(builder: (_) => const DemoSession()),
     );
   }
 }

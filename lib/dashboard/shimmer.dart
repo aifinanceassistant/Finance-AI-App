@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_theme.dart';
+import 'dash_colors.dart';
 import 'ui.dart';
 
 class ShimmerBox extends StatefulWidget {
@@ -38,11 +38,14 @@ class _ShimmerBoxState extends State<ShimmerBox>
       animation: _ctrl,
       builder: (context, _) {
         final t = 0.55 + (_ctrl.value * 0.35);
+        final base = context.isDark
+            ? context.dashLine
+            : const Color(0xFFE8EEF4);
         return Container(
           width: widget.width,
           height: widget.height,
           decoration: BoxDecoration(
-            color: const Color(0xFFE8EEF4).withValues(alpha: t),
+            color: base.withValues(alpha: t),
             borderRadius: BorderRadius.circular(widget.borderRadius),
           ),
         );
@@ -115,7 +118,7 @@ class ListShimmer extends StatelessWidget {
                 ],
               ),
             ),
-            const Divider(height: 1, color: AppColors.line),
+            Divider(height: 1, color: context.dashLine),
             for (var i = 0; i < rows; i++) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -144,7 +147,7 @@ class ListShimmer extends StatelessWidget {
                 ),
               ),
               if (i < rows - 1)
-                const Divider(height: 1, color: AppColors.line),
+                Divider(height: 1, color: context.dashLine),
             ],
           ],
         ),

@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
+import '../dash_colors.dart';
 import '../../auth/auth_scope.dart';
 import '../accounts_controller.dart';
 import '../accounts_scope.dart';
+import '../categories_scope.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
 import '../filter_sort.dart';
@@ -234,214 +236,22 @@ String _chartTypeLabel(_CashChartType t) => switch (t) {
       _CashChartType.combined => 'Combined',
     };
 
-class _CashflowKpiCard extends StatefulWidget {
-  const _CashflowKpiCard({
-    required this.label,
-    required this.value,
-    required this.buckets,
-    required this.metric,
-    this.onOpen,
-  });
-
-  final String label;
-  final String value;
-  final List<_CashBucket> buckets;
-  final _CashMetric metric;
-  final VoidCallback? onOpen;
-
-  @override
-  State<_CashflowKpiCard> createState() => _CashflowKpiCardState();
-}
-
-class _CashflowKpiCardState extends State<_CashflowKpiCard> {
-  int? _active;
-  late int _pinned;
-  late _CashChartType _chartType;
-
-  @override
-  void initState() {
-    super.initState();
-    _pinned = _currentMonthBucketIndex(widget.buckets);
-    _chartType = widget.metric == _CashMetric.net
-        ? _CashChartType.combined
-        : _CashChartType.bars;
-  }
-
-  @override
-  void didUpdateWidget(covariant _CashflowKpiCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.buckets != widget.buckets) {
-      _pinned = _currentMonthBucketIndex(widget.buckets);
-      _active = null;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final combined = _chartType == _CashChartType.combined;
-    final focus = (_active ?? _pinned).clamp(
-      0,
-      widget.buckets.isEmpty ? 0 : widget.buckets.length - 1,
-    );
-    final b = widget.buckets.isEmpty ? null : widget.buckets[focus];
-    final chartH = combined ? 88.0 : 72.0;
-
-    String caption;
-    if (b == null) {
-      caption = '';
-    } else if (combined) {
-      caption =
-          '${b.label} · ${money(b.inflow)} / ${money(b.outflow)} / ${money(b.net, signed: true)}';
-    } else if (widget.metric == _CashMetric.inflow) {
-      caption = '${b.label} · ${money(b.inflow)}';
-    } else if (widget.metric == _CashMetric.outflow) {
-      caption = '${b.label} · ${money(b.outflow)}';
-    } else {
-      caption = '${b.label} · ${money(b.net, signed: true)}';
-    }
-
-    return DashPanel(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: widget.onOpen,
-          borderRadius: BorderRadius.circular(12),
-          child: SizedBox.expand(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.label,
-                  style: const TextStyle(
-                    color: AppColors.mute,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  widget.value,
-                  style: const TextStyle(
-                    color: AppColors.ink,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const Spacer(),
-                const SizedBox(height: 10),
-                if (widget.buckets.isEmpty)
-                  const Text(
-                    'No dated payments yet',
-                    style: TextStyle(color: AppColors.softMute, fontSize: 12),
-                  )
-                else ...[
-                  SizedBox(
-                    height: chartH,
-                    width: double.infinity,
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        return GestureDetector(
-                          onHorizontalDragUpdate: (d) => _selectFromDx(
-                            d.localPosition.dx,
-                            constraints.maxWidth,
-                            pin: false,
-                          ),
-                          onHorizontalDragEnd: (_) =>
-                              setState(() => _active = null),
-                          child: CustomPaint(
-                            painter: _CashBarsPainter(
-                              buckets: widget.buckets,
-                              metric: widget.metric,
-                              chartType: _chartType,
-                              focus: focus,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          caption,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.ink,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      DropdownButtonHideUnderline(
-                        child: DropdownButton<_CashChartType>(
-                          value: _chartType,
-                          isDense: true,
-                          style: const TextStyle(
-                            color: AppColors.softMute,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          icon: const Icon(
-                            Icons.expand_more,
-                            size: 14,
-                            color: AppColors.softMute,
-                          ),
-                          items: [
-                            for (final t in _chartTypesFor(widget.metric))
-                              DropdownMenuItem(
-                                value: t,
-                                child: Text(_chartTypeLabel(t)),
-                              ),
-                          ],
-                          onChanged: (v) {
-                            if (v != null) setState(() => _chartType = v);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _selectFromDx(double dx, double width, {required bool pin}) {
-    final n = widget.buckets.length;
-    if (n == 0 || width <= 0) return;
-    final i = (dx / width * n).floor().clamp(0, n - 1);
-    setState(() {
-      if (pin) {
-        _pinned = i;
-        _active = i;
-      } else {
-        _active = i;
-      }
-    });
-  }
-}
-
 class _CashBarsPainter extends CustomPainter {
   _CashBarsPainter({
     required this.buckets,
     required this.metric,
     required this.chartType,
     required this.focus,
+    required this.lineColor,
+    required this.labelColor,
   });
 
   final List<_CashBucket> buckets;
   final _CashMetric metric;
   final _CashChartType chartType;
   final int focus;
+  final Color lineColor;
+  final Color labelColor;
 
   static const _inColor = Color(0xFF0D9488);
   static const _outColor = Color(0xFFE11D48);
@@ -518,7 +328,7 @@ class _CashBarsPainter extends CustomPainter {
       Offset(0, zeroY),
       Offset(size.width, zeroY),
       Paint()
-        ..color = AppColors.line
+        ..color = lineColor
         ..strokeWidth = 1,
     );
 
@@ -655,8 +465,8 @@ class _CashBarsPainter extends CustomPainter {
           );
           tp.text = TextSpan(
             text: label,
-            style: const TextStyle(
-              color: AppColors.softMute,
+            style: TextStyle(
+              color: labelColor,
               fontSize: 8,
               fontWeight: FontWeight.w600,
             ),
@@ -671,8 +481,8 @@ class _CashBarsPainter extends CustomPainter {
           );
           tp.text = TextSpan(
             text: label,
-            style: const TextStyle(
-              color: AppColors.softMute,
+            style: TextStyle(
+              color: labelColor,
               fontSize: 8,
               fontWeight: FontWeight.w600,
             ),
@@ -693,13 +503,22 @@ class _CashBarsPainter extends CustomPainter {
       oldDelegate.buckets != buckets ||
       oldDelegate.metric != metric ||
       oldDelegate.chartType != chartType ||
-      oldDelegate.focus != focus;
+      oldDelegate.focus != focus ||
+      oldDelegate.lineColor != lineColor ||
+      oldDelegate.labelColor != labelColor;
 }
 
 class TransactionsScreen extends StatefulWidget {
-  const TransactionsScreen({super.key, this.categoryFilter});
+  const TransactionsScreen({
+    super.key,
+    this.categoryFilter,
+    this.openReconcileOnStart = false,
+    this.onRefresh,
+  });
 
   final String? categoryFilter;
+  final bool openReconcileOnStart;
+  final Future<void> Function()? onRefresh;
 
   @override
   State<TransactionsScreen> createState() => _TransactionsScreenState();
@@ -709,7 +528,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   late List<FilterRule> _filterRules;
   List<SortRule> _sortRules = [];
   String _search = '';
-  var _showStats = false;
   final _scroll = ScrollController();
   bool _stickyPinned = false;
   bool _stickyStatsOpen = false;
@@ -737,6 +555,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // ignore: discarded_futures
       _loadFoldingPref();
+      if (widget.openReconcileOnStart && mounted) {
+        // ignore: discarded_futures
+        _openReconcileSheet();
+      }
     });
   }
 
@@ -781,16 +603,39 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   void _onScroll() {
     if (!_foldingEnabled) return;
     if (!_scroll.hasClients) return;
-    // Scroll can only open fold mode — close is via the header X only.
-    if (_stickyPinned || _stickyInteract) return;
-    final threshold = MediaQuery.sizeOf(context).height * 0.9;
-    if (_scroll.offset < threshold) return;
-    setState(() => _stickyPinned = true);
+    if (_stickyInteract) return;
+
+    final openAt = MediaQuery.sizeOf(context).height * 0.55;
+    final hideAt = 72.0;
+    final offset = _scroll.offset;
+
+    if (!_stickyPinned) {
+      if (offset >= openAt) {
+        setState(() => _stickyPinned = true);
+      }
+      return;
+    }
+
+    // Fold away when the user scrolls back near the top.
+    if (offset <= hideAt) {
+      setState(() {
+        _stickyPinned = false;
+        _stickyStatsOpen = false;
+      });
+    }
   }
 
   @override
   void didUpdateWidget(covariant TransactionsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.openReconcileOnStart && !oldWidget.openReconcileOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          // ignore: discarded_futures
+          _openReconcileSheet();
+        }
+      });
+    }
     final next = widget.categoryFilter?.trim();
     final prev = oldWidget.categoryFilter?.trim();
     if (next == prev) return;
@@ -827,12 +672,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     return applySort(filtered, _sortRules, _txnValue);
   }
 
-  List<DemoTxn> get _openItems => _txns
-      .where(
-        (t) => t.status == TxnStatus.pending || t.status == TxnStatus.failed,
-      )
-      .toList();
-
   void _exportCsv() {
     final filtered = _filtered;
     final rows = [
@@ -849,15 +688,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     toast(
       context,
       'CSV copied · ${filtered.length} transaction${filtered.length == 1 ? '' : 's'}',
-    );
-  }
-
-  Future<void> _setApproval(String id, ApprovalStatus status) async {
-    await _ctrl.setApproval(id, status);
-    if (!mounted) return;
-    toast(
-      context,
-      status == ApprovalStatus.approved ? 'Approved' : 'Rejected',
     );
   }
 
@@ -959,7 +789,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 style: TextStyle(
                   color: fieldErrors['account'] != null
                       ? AppColors.danger
-                      : AppColors.softMute,
+                      : context.dashSoftMute,
                   fontSize: 13,
                 ),
               )
@@ -1046,10 +876,297 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     dateCtrl.dispose();
   }
 
-  Future<void> _markSettled(String id) async {
-    await _ctrl.markSettled(id);
-    if (!mounted) return;
-    toast(context, 'Marked settled');
+  List<String> _categoryOptionsFor(DemoTxn t) {
+    final fromScope = context
+            .getInheritedWidgetOfExactType<CategoriesScope>()
+            ?.notifier
+            ?.categories
+            .map((c) => c.name)
+            .toList() ??
+        const <String>[];
+    final names = <String>{
+      if (t.category.trim().isNotEmpty) t.category,
+      'Uncategorized',
+      ...fromScope,
+      ..._txns.map((x) => x.category),
+    };
+    final list = names.where((n) => n.trim().isNotEmpty).toList()..sort();
+    if (!list.contains(t.category) && t.category.trim().isNotEmpty) {
+      list.insert(0, t.category);
+    }
+    return list.isEmpty ? ['Uncategorized'] : list;
+  }
+
+  Future<void> _openDetailSheet(DemoTxn txn) async {
+    var category = txn.category;
+    var type = txn.type;
+    var reconciled = txn.status == TxnStatus.succeeded;
+    final categoryOptions = _categoryOptionsFor(txn);
+    if (!categoryOptions.contains(category)) {
+      category = categoryOptions.first;
+    }
+
+    await showDashSheet<void>(
+      context: context,
+      title: txn.merchant,
+      description: '${txn.account} · ${txn.date}',
+      builder: (ctx, setSheetState) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                StatusPill(status: txn.status),
+                const SizedBox(width: 8),
+                ApprovalActions(
+                  status: txn.approvalStatus,
+                  onApprove: () async {
+                    await _ctrl.setApproval(txn.id, ApprovalStatus.approved);
+                    if (!mounted) return;
+                    Navigator.pop(context);
+                    toast(context, 'Approved · ${txn.merchant}');
+                  },
+                  onReject: () async {
+                    await _ctrl.setApproval(txn.id, ApprovalStatus.rejected);
+                    if (!mounted) return;
+                    Navigator.pop(context);
+                    toast(context, 'Rejected · ${txn.merchant}');
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ConvertedAmountText(
+              amount: (txn.originalAmount ?? txn.amount).abs(),
+              originalCurrency: txn.originalCurrency ?? 'USD',
+              signed: true,
+              isIncome: txn.amount > 0,
+              primaryStyle: TextStyle(
+                color: txn.amount > 0 ? AppColors.success : context.dashInk,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const DashFieldLabel('Category'),
+            DashDropdown<String>(
+              value: category,
+              items: categoryOptions,
+              labelOf: (c) => c,
+              onChanged: (v) => setSheetState(() => category = v),
+            ),
+            const SizedBox(height: 14),
+            const DashFieldLabel('Type'),
+            DashDropdown<MoneyMove>(
+              value: type,
+              items: const [
+                MoneyMove.expense,
+                MoneyMove.income,
+                MoneyMove.transfer,
+              ],
+              labelOf: moneyMoveLabel,
+              onChanged: (v) => setSheetState(() => type = v),
+            ),
+            const SizedBox(height: 14),
+            InkWell(
+              onTap: () => setSheetState(() => reconciled = !reconciled),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: reconciled,
+                    onChanged: (v) =>
+                        setSheetState(() => reconciled = v ?? false),
+                    activeColor: AppColors.brand,
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Reconciled',
+                      style: TextStyle(
+                        color: context.dashInk,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (txn.status == TxnStatus.pending ||
+                txn.status == TxnStatus.failed) ...[
+              const SizedBox(height: 8),
+              GhostButton(
+                label: 'Mark settled',
+                onPressed: () async {
+                  await _ctrl.markSettled(txn.id);
+                  if (!mounted) return;
+                  Navigator.pop(context);
+                  toast(context, 'Settled · ${txn.merchant}');
+                },
+              ),
+            ],
+          ],
+        );
+      },
+      actions: [
+        TextButton(
+          onPressed: () async {
+            final ok = await _ctrl.remove(txn.id);
+            if (!mounted) return;
+            Navigator.pop(context);
+            toast(context, ok ? 'Transaction removed' : 'Could not remove');
+          },
+          child: const Text(
+            'Delete',
+            style: TextStyle(
+              color: Color(0xFFC53030),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          child: GhostButton(
+            label: 'Cancel',
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        Expanded(
+          child: AccentButton(
+            label: 'Save',
+            onPressed: () async {
+              await _ctrl.updateDetail(
+                id: txn.id,
+                category: category,
+                type: type,
+                reconciled: reconciled,
+              );
+              if (!mounted) return;
+              Navigator.pop(context);
+              toast(context, 'Transaction updated · ${txn.merchant}');
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openReconcileSheet() async {
+    await showDashSheet<void>(
+      context: context,
+      title: 'Reconcile',
+      description: 'Settle pending or failed transactions',
+      builder: (ctx, setSheetState) {
+        final open = _txns
+            .where(
+              (t) =>
+                  t.status == TxnStatus.pending ||
+                  t.status == TxnStatus.failed,
+            )
+            .toList();
+        if (open.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Text(
+              'Nothing to reconcile',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.dashSoftMute, fontSize: 13),
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final t in open)
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                decoration: BoxDecoration(
+                  border: Border.all(color: context.dashLine),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            t.merchant,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: context.dashInk,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${_statusLabel(t.status)} · ${t.category}',
+                            style: TextStyle(
+                              color: context.dashSoftMute,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        await _ctrl.markSettled(t.id);
+                        if (!ctx.mounted) return;
+                        setSheetState(() {});
+                        if (!mounted) return;
+                        toast(context, 'Settled · ${t.merchant}');
+                      },
+                      child: const Text(
+                        'Settle',
+                        style: TextStyle(
+                          color: Color(0xFF3B9AE0),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+      actions: [
+        Expanded(
+          child: GhostButton(
+            label: 'Close',
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        Expanded(
+          child: AccentButton(
+            label: 'Settle all',
+            onPressed: () async {
+              final open = _txns
+                  .where(
+                    (t) =>
+                        t.status == TxnStatus.pending ||
+                        t.status == TxnStatus.failed,
+                  )
+                  .length;
+              if (open == 0) {
+                Navigator.pop(context);
+                toast(context, 'Nothing to reconcile');
+                return;
+              }
+              await _ctrl.settleAll();
+              if (!mounted) return;
+              Navigator.pop(context);
+              toast(
+                context,
+                'Settled $open transaction${open == 1 ? '' : 's'}',
+              );
+            },
+          ),
+        ),
+      ],
+    );
   }
 
   void _openCashflowDetail(List<DemoTxn> txns, _CashMetric metric) {
@@ -1086,73 +1203,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     );
   }
 
-  Future<void> _settleAll() async {
-    final count = _openItems.length;
-    await _ctrl.settleAll();
-    if (!mounted) return;
-    Navigator.pop(context);
-    toast(context, 'All settled · $count item${count == 1 ? '' : 's'} reconciled');
-  }
-
-  Future<void> _openReconcileSheet() async {
-    await showDashSheet<void>(
-      context: context,
-      title: 'Reconciliation',
-      description: 'Review pending and failed payments',
-      builder: (ctx, setSheetState) {
-        final open = _txns
-            .where(
-              (t) =>
-                  t.status == TxnStatus.pending ||
-                  t.status == TxnStatus.failed,
-            )
-            .toList();
-
-        void onSettle(String id) {
-          _markSettled(id);
-          setSheetState(() {});
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (open.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Text(
-                  'Nothing left to reconcile',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.softMute, fontSize: 13),
-                ),
-              )
-            else
-              _ReconcileInboxBody(items: open, onSettle: onSettle),
-            if (open.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: GhostButton(
-                      label: 'Close',
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: AccentButton(
-                      label: 'Settle all',
-                      onPressed: _settleAll,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final filtered = _filtered;
@@ -1165,13 +1215,20 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final outflow =
         kpiBuckets.fold<double>(0, (s, b) => s + b.outflow);
     final net = inflow - outflow;
-    final buckets = _buildCashflowBuckets(filtered);
-    final categoryFilter = widget.categoryFilter?.trim();
 
     return Stack(
       children: [
-        ListView(
+        dashPullToRefresh(
+          onRefresh: widget.onRefresh ??
+              () async {
+                final id = _ctrl.spaceId;
+                if (id.isEmpty) return;
+                await _ctrl.loadForSpace(id);
+              },
+          backgroundColor: context.dashPanel,
+          child: ListView(
           controller: _scroll,
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.only(bottom: 28),
           children: [
             AnimatedOpacity(
@@ -1181,226 +1238,43 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  DashPageHeader(
-                    title: 'Transactions',
-                    subtitle:
-                        categoryFilter != null && categoryFilter.isNotEmpty
-                            ? 'Filtered · Category is $categoryFilter'
-                            : 'All payments across linked accounts',
-                    actions: [
-                      GhostButton(label: 'Export CSV', onPressed: _exportCsv),
-                      AccentButton(
-                        label: 'Add',
-                        onPressed: SpacesScope.maybeOf(context)
-                                    ?.can('transactions', 'write') ==
-                                false
-                            ? null
-                            : _openAddSheet,
-                      ),
-                    ],
-                  ),
                   if (_ctrl.loading)
                     const DashLoadingBody(kpiCount: 2, listRows: 7)
-                  else ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                      child: IgnorePointer(
-                        ignoring: _stickyPinned,
-                        child: Opacity(
-                          opacity: _stickyPinned ? 0 : 1,
-                          child: FilterSortBar(
-                            fields: _filterFields,
-                            rules: _filterRules,
-                            sorts: _sortRules,
-                            selectOptions: _selectOptions,
-                            defaultFilterField: 'category',
-                            defaultSortField: 'date',
-                            search: _search,
-                            onSearchChanged: (v) =>
-                                setState(() => _search = v),
-                            searchHint: 'Search transactions…',
-                            onRulesChanged: (rules) =>
-                                setState(() => _filterRules = rules),
-                            onSortsChanged: (sorts) =>
-                                setState(() => _sortRules = sorts),
-                            showStats: _showStats,
-                            onShowStatsChanged: (v) =>
-                                setState(() => _showStats = v),
-                          ),
-                        ),
-                      ),
+                  else
+                    _ActivityPageChrome(
+                      canWrite: SpacesScope.maybeOf(context)
+                              ?.can('transactions', 'write') !=
+                          false,
+                      search: _search,
+                      filterRules: _filterRules,
+                      sortRules: _sortRules,
+                      stickyPinned: _stickyPinned,
+                      selectOptions: _selectOptions,
+                      onSearchChanged: (v) => setState(() => _search = v),
+                      onRulesChanged: (r) =>
+                          setState(() => _filterRules = r),
+                      onSortsChanged: (s) =>
+                          setState(() => _sortRules = s),
+                      onExport: _exportCsv,
+                      onReconcile: _openReconcileSheet,
+                      onAdd: _openAddSheet,
+                      inflow: inflow,
+                      outflow: outflow,
+                      filtered: filtered,
                     ),
-                    if (_showStats) ...[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(
-                              child: _CashflowKpiCard(
-                                label: 'Inflow (filtered)',
-                                value: money(inflow),
-                                buckets: buckets,
-                                metric: _CashMetric.inflow,
-                                onOpen: () => _openCashflowDetail(
-                                  filtered,
-                                  _CashMetric.inflow,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _CashflowKpiCard(
-                                label: 'Outflow (filtered)',
-                                value: money(outflow),
-                                buckets: buckets,
-                                metric: _CashMetric.outflow,
-                                onOpen: () => _openCashflowDetail(
-                                  filtered,
-                                  _CashMetric.outflow,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: _CashflowKpiCard(
-                          label: 'Net',
-                          value: money(net, signed: true),
-                          buckets: buckets,
-                          metric: _CashMetric.net,
-                          onOpen: () =>
-                              _openCashflowDetail(filtered, _CashMetric.net),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                  ],
                 ],
               ),
             ),
             if (!_ctrl.loading)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: DashPanel(
-                  child: Column(
-                    children: [
-                      DashPanelHeader(
-                        title: 'Payments',
-                        subtitle:
-                            '${filtered.length} of ${_txns.length} shown',
-                        action: LinkAction(
-                          label: 'Reconcile',
-                          onTap: _openReconcileSheet,
-                        ),
-                      ),
-                      if (filtered.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(16, 24, 16, 28),
-                          child: Text(
-                            'No transactions match these filters',
-                            style: TextStyle(
-                              color: AppColors.mute,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        )
-                      else
-                        for (final t in filtered)
-                          Container(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                            decoration: const BoxDecoration(
-                              border: Border(
-                                top: BorderSide(color: AppColors.line),
-                              ),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        t.merchant,
-                                        style: const TextStyle(
-                                          color: AppColors.ink,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${t.category} · ${t.account}',
-                                        style: const TextStyle(
-                                          color: AppColors.mute,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Wrap(
-                                        spacing: 6,
-                                        runSpacing: 6,
-                                        children: [
-                                          TypePill(type: t.type),
-                                          StatusPill(status: t.status),
-                                          ApprovalActions(
-                                            status: t.approvalStatus,
-                                            onApprove: () => _setApproval(
-                                              t.id,
-                                              ApprovalStatus.approved,
-                                            ),
-                                            onReject: () => _setApproval(
-                                              t.id,
-                                              ApprovalStatus.rejected,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    ConvertedAmountText(
-                                      amount: (t.originalAmount ?? t.amount)
-                                          .abs(),
-                                      originalCurrency:
-                                          t.originalCurrency ?? 'USD',
-                                      signed: true,
-                                      isIncome: t.amount > 0,
-                                      primaryStyle: TextStyle(
-                                        color: t.amount > 0
-                                            ? AppColors.success
-                                            : AppColors.ink,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      t.date,
-                                      style: const TextStyle(
-                                        color: AppColors.mute,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                    ],
-                  ),
+                child: _ActivityPaymentsBody(
+                  filtered: filtered,
+                  onTxnTap: _openDetailSheet,
                 ),
               ),
           ],
+        ),
         ),
         Positioned(
           left: 0,
@@ -1429,33 +1303,17 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                     }
                   },
                   child: Material(
-                  color: Colors.white,
-                  elevation: 6,
+                  color: context.dashPanel,
+                  elevation: context.isDark ? 0 : 6,
                   shadowColor: Colors.black26,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 10, 12, 8),
+                        padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
                         child: Row(
                           children: [
                             Expanded(
-                              child: Text(
-                                categoryFilter != null &&
-                                        categoryFilter.isNotEmpty
-                                    ? 'Filtered · Category is $categoryFilter'
-                                    : 'All payments across linked accounts',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: AppColors.ink,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Flexible(
                               child: FilterSortBar(
                                 fields: _filterFields,
                                 rules: _filterRules,
@@ -1466,61 +1324,35 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                 search: _search,
                                 onSearchChanged: (v) =>
                                     setState(() => _search = v),
-                                searchHint: 'Search transactions…',
+                                searchHint: 'Search activity…',
                                 onRulesChanged: (rules) =>
                                     setState(() => _filterRules = rules),
                                 onSortsChanged: (sorts) =>
                                     setState(() => _sortRules = sorts),
-                                showStats: _showStats,
-                                onShowStatsChanged: (v) =>
-                                    setState(() => _showStats = v),
+                                iconButtons: true,
+                                expandSearch: true,
                               ),
                             ),
                             const SizedBox(width: 4),
-                            OutlinedButton(
+                            IconButton(
                               onPressed: () => setState(
                                 () => _stickyStatsOpen = !_stickyStatsOpen,
                               ),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: _stickyStatsOpen
-                                    ? const Color(0xFF2A7FC4)
-                                    : AppColors.ink,
-                                backgroundColor: _stickyStatsOpen
-                                    ? const Color(0xFFF5F9FD)
-                                    : Colors.white,
-                                side: BorderSide(
-                                  color: _stickyStatsOpen
-                                      ? const Color(0xFFCFE4F6)
-                                      : AppColors.line,
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                minimumSize: const Size(0, 34),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                visualDensity: VisualDensity.compact,
+                              tooltip: _stickyStatsOpen
+                                  ? 'Hide stats'
+                                  : 'Show stats',
+                              icon: Icon(
+                                Icons.speed_outlined,
+                                size: 18,
+                                color: _stickyStatsOpen
+                                    ? AppColors.brandDark
+                                    : context.dashMute,
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Text(
-                                    'Stats',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  AnimatedRotation(
-                                    turns: _stickyStatsOpen ? 0.5 : 0,
-                                    duration: const Duration(milliseconds: 200),
-                                    child: const Icon(
-                                      Icons.expand_more,
-                                      size: 16,
-                                    ),
-                                  ),
-                                ],
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 34,
+                                minHeight: 34,
                               ),
                             ),
                             IconButton(
@@ -1533,13 +1365,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                 if (_scroll.hasClients) {
                                   _scroll.animateTo(
                                     0,
-                                    duration: const Duration(milliseconds: 420),
+                                    duration:
+                                        const Duration(milliseconds: 420),
                                     curve: Curves.easeOutCubic,
                                   );
                                 }
                               },
                               icon: const Icon(Icons.close, size: 18),
-                              color: AppColors.mute,
+                              color: context.dashMute,
                               tooltip: 'Close folded view',
                               visualDensity: VisualDensity.compact,
                               padding: EdgeInsets.zero,
@@ -1559,9 +1392,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                             ? Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Divider(
+                                  Divider(
                                     height: 1,
-                                    color: AppColors.line,
+                                    color: context.dashLine,
                                   ),
                                   Row(
                                     children: [
@@ -1579,7 +1412,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                       Container(
                                         width: 1,
                                         height: 44,
-                                        color: AppColors.line,
+                                        color: context.dashLine,
                                       ),
                                       Expanded(
                                         child: _StickyKpiChip(
@@ -1595,7 +1428,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                       Container(
                                         width: 1,
                                         height: 44,
-                                        color: AppColors.line,
+                                        color: context.dashLine,
                                       ),
                                       Expanded(
                                         child: _StickyKpiChip(
@@ -1627,6 +1460,191 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 }
 
+class _ActivityPageChrome extends StatelessWidget {
+  const _ActivityPageChrome({
+    required this.canWrite,
+    required this.search,
+    required this.filterRules,
+    required this.sortRules,
+    required this.stickyPinned,
+    required this.selectOptions,
+    required this.onSearchChanged,
+    required this.onRulesChanged,
+    required this.onSortsChanged,
+    required this.onExport,
+    required this.onReconcile,
+    required this.onAdd,
+    required this.inflow,
+    required this.outflow,
+    required this.filtered,
+  });
+
+  final bool canWrite;
+  final String search;
+  final List<FilterRule> filterRules;
+  final List<SortRule> sortRules;
+  final bool stickyPinned;
+  final List<String> Function(String field) selectOptions;
+  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<List<FilterRule>> onRulesChanged;
+  final ValueChanged<List<SortRule>> onSortsChanged;
+  final VoidCallback onExport;
+  final VoidCallback onReconcile;
+  final VoidCallback onAdd;
+  final double inflow;
+  final double outflow;
+  final List<DemoTxn> filtered;
+
+  Widget _filterBar() {
+    return IgnorePointer(
+      ignoring: stickyPinned,
+      child: Opacity(
+        opacity: stickyPinned ? 0 : 1,
+        child: FilterSortBar(
+          fields: _filterFields,
+          rules: filterRules,
+          sorts: sortRules,
+          selectOptions: selectOptions,
+          defaultFilterField: 'category',
+          defaultSortField: 'date',
+          search: search,
+          onSearchChanged: onSearchChanged,
+          searchHint: 'Search activity…',
+          onRulesChanged: onRulesChanged,
+          onSortsChanged: onSortsChanged,
+          iconButtons: true,
+          expandSearch: true,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DashFeedChrome(
+      title: 'Activity',
+      subtitle: '${filtered.length} moves',
+      onSecondary: onExport,
+      secondaryTooltip: 'Export CSV',
+      extraActions: [
+        IconButton(
+          onPressed: onReconcile,
+          tooltip: 'Reconcile',
+          icon: const Icon(Icons.fact_check_outlined, size: 22),
+          color: context.dashInk,
+          visualDensity: VisualDensity.compact,
+        ),
+      ],
+      onPrimary: onAdd,
+      primaryEnabled: canWrite,
+      metaLine: 'In ${money(inflow)} · Out ${money(outflow)}',
+      filterBar: _filterBar(),
+    );
+  }
+}
+
+class _ActivityPaymentsBody extends StatelessWidget {
+  const _ActivityPaymentsBody({
+    required this.filtered,
+    required this.onTxnTap,
+  });
+
+  final List<DemoTxn> filtered;
+  final ValueChanged<DemoTxn> onTxnTap;
+
+  Widget _empty(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 28),
+      child: Text(
+        'No transactions match these filters',
+        style: TextStyle(
+          color: context.dashMute,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (filtered.isEmpty) {
+      return _empty(context);
+    }
+    final groups = <String, List<DemoTxn>>{};
+    final order = <String>[];
+    for (final t in filtered) {
+      final key = t.date;
+      if (!groups.containsKey(key)) {
+        groups[key] = [];
+        order.add(key);
+      }
+      groups[key]!.add(t);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final date in order) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(0, 14, 0, 6),
+            child: Text(
+              date,
+              style: TextStyle(
+                color: context.dashMute,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          for (final t in groups[date]!)
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => onTxnTap(t),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: context.dashLine),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          t.merchant,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: context.dashInk,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        money(t.amount, signed: true),
+                        style: TextStyle(
+                          color: t.amount > 0
+                              ? AppColors.success
+                              : context.dashInk,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
 class _StickyKpiChip extends StatelessWidget {
   const _StickyKpiChip({
     required this.label,
@@ -1651,8 +1669,8 @@ class _StickyKpiChip extends StatelessWidget {
           children: [
             Text(
               label,
-              style: const TextStyle(
-                color: AppColors.mute,
+              style: TextStyle(
+                color: context.dashMute,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -1674,239 +1692,6 @@ class _StickyKpiChip extends StatelessWidget {
   }
 }
 
-
-TextStyle _reconcileAmountStyle(double amount, {double fontSize = 14}) {
-  return TextStyle(
-    color: amount > 0 ? AppColors.success : AppColors.ink,
-    fontSize: fontSize,
-    fontWeight: FontWeight.w700,
-  );
-}
-
-
-class _ReconcileInboxBody extends StatefulWidget {
-  const _ReconcileInboxBody({required this.items, required this.onSettle});
-
-  final List<DemoTxn> items;
-  final ValueChanged<String> onSettle;
-
-  @override
-  State<_ReconcileInboxBody> createState() => _ReconcileInboxBodyState();
-}
-
-class _ReconcileInboxBodyState extends State<_ReconcileInboxBody> {
-  String? _activeId;
-
-  @override
-  void initState() {
-    super.initState();
-    _activeId = widget.items.firstOrNull?.id;
-  }
-
-  @override
-  void didUpdateWidget(covariant _ReconcileInboxBody oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!widget.items.any((t) => t.id == _activeId)) {
-      _activeId = widget.items.firstOrNull?.id;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final active = widget.items
-            .where((t) => t.id == _activeId)
-            .firstOrNull ??
-        widget.items.firstOrNull;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.line),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              for (final t in widget.items)
-                Material(
-                  color: t.id == active?.id
-                      ? const Color(0xFFF5F9FD)
-                      : Colors.white,
-                  child: InkWell(
-                    onTap: () => setState(() => _activeId = t.id),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      decoration: const BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(color: AppColors.line),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  t.merchant,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: AppColors.ink,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${t.date} · ${_statusLabel(t.status)}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: AppColors.softMute,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          ConvertedAmountText(
-                            amount: (t.originalAmount ?? t.amount).abs(),
-                            originalCurrency: t.originalCurrency ?? 'USD',
-                            signed: true,
-                            isIncome: t.amount > 0,
-                            primaryStyle:
-                                _reconcileAmountStyle(t.amount, fontSize: 13),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        if (active != null) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.line),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    TypePill(type: active.type),
-                    StatusPill(status: active.status),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  active.merchant,
-                  style: const TextStyle(
-                    color: AppColors.ink,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ConvertedAmountText(
-                  amount: (active.originalAmount ?? active.amount).abs(),
-                  originalCurrency: active.originalCurrency ?? 'USD',
-                  signed: true,
-                  isIncome: active.amount > 0,
-                  primaryStyle:
-                      _reconcileAmountStyle(active.amount, fontSize: 28),
-                  textAlign: TextAlign.left,
-                ),
-                const SizedBox(height: 16),
-                _ReconcileDetailGrid(active: active),
-                const SizedBox(height: 20),
-                AccentButton(
-                  label: 'Mark settled',
-                  onPressed: () => widget.onSettle(active.id),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _ReconcileDetailGrid extends StatelessWidget {
-  const _ReconcileDetailGrid({required this.active});
-
-  final DemoTxn active;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(child: _ReconcileDetailCell(label: 'Category', value: active.category)),
-            Expanded(child: _ReconcileDetailCell(label: 'Account', value: active.account)),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: _ReconcileDetailCell(label: 'Date', value: active.date)),
-            Expanded(
-              child: _ReconcileDetailCell(
-                label: 'Status',
-                value: _statusLabel(active.status),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _ReconcileDetailCell extends StatelessWidget {
-  const _ReconcileDetailCell({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(color: AppColors.softMute, fontSize: 13),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: const TextStyle(
-            color: AppColors.ink,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 enum _CashTimeframe { m6, y1, y2, all }
 
@@ -1993,7 +1778,7 @@ class _CashflowDetailPageState extends State<_CashflowDetailPage> {
     };
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.dashPanel,
       body: Stack(
         children: [
           Positioned(
@@ -2032,15 +1817,15 @@ class _CashflowDetailPageState extends State<_CashflowDetailPage> {
                     child: DropdownButton<_CashChartType>(
                       value: _chartType,
                       isDense: true,
-                      style: const TextStyle(
-                        color: AppColors.ink,
+                      style: TextStyle(
+                        color: context.dashInk,
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.expand_more,
                         size: 18,
-                        color: AppColors.softMute,
+                        color: context.dashSoftMute,
                       ),
                       items: [
                         for (final t in _chartTypesFor(_metric))
@@ -2059,22 +1844,22 @@ class _CashflowDetailPageState extends State<_CashflowDetailPage> {
                   Container(
                     width: 1,
                     height: 16,
-                    color: AppColors.line,
+                    color: context.dashLine,
                   ),
                   const SizedBox(width: 8),
                   DropdownButtonHideUnderline(
                     child: DropdownButton<_CashTimeframe>(
                       value: _timeframe,
                       isDense: true,
-                      style: const TextStyle(
-                        color: AppColors.ink,
+                      style: TextStyle(
+                        color: context.dashInk,
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.expand_more,
                         size: 18,
-                        color: AppColors.softMute,
+                        color: context.dashSoftMute,
                       ),
                       items: [
                         for (final t in _CashTimeframe.values)
@@ -2102,22 +1887,22 @@ class _CashflowDetailPageState extends State<_CashflowDetailPage> {
                   Container(
                     width: 1,
                     height: 16,
-                    color: AppColors.line,
+                    color: context.dashLine,
                   ),
                   const SizedBox(width: 8),
                   DropdownButtonHideUnderline(
                     child: DropdownButton<_CashMetric>(
                       value: _metric,
                       isDense: true,
-                      style: const TextStyle(
-                        color: AppColors.ink,
+                      style: TextStyle(
+                        color: context.dashInk,
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.expand_more,
                         size: 18,
-                        color: AppColors.softMute,
+                        color: context.dashSoftMute,
                       ),
                       items: [
                         for (final m in _CashMetric.values)
@@ -2148,7 +1933,7 @@ class _CashflowDetailPageState extends State<_CashflowDetailPage> {
                   const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, color: AppColors.mute),
+                    icon: Icon(Icons.close, color: context.dashMute),
                     tooltip: 'Close',
                   ),
                 ],
@@ -2160,8 +1945,8 @@ class _CashflowDetailPageState extends State<_CashflowDetailPage> {
                 children: [
                   Text(
                     b?.label ?? '',
-                    style: const TextStyle(
-                      color: AppColors.softMute,
+                    style: TextStyle(
+                      color: context.dashSoftMute,
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.4,
@@ -2187,7 +1972,7 @@ class _CashflowDetailPageState extends State<_CashflowDetailPage> {
                         _CashStat(
                           label: 'Net',
                           value: money(b.net, signed: true),
-                          color: AppColors.ink,
+                          color: context.dashInk,
                         ),
                       ],
                     )
@@ -2201,8 +1986,8 @@ class _CashflowDetailPageState extends State<_CashflowDetailPage> {
                                 : (b?.net ?? 0),
                         signed: _metric == _CashMetric.net,
                       ),
-                      style: const TextStyle(
-                        color: AppColors.ink,
+                      style: TextStyle(
+                        color: context.dashInk,
                         fontSize: 32,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -0.6,
@@ -2250,6 +2035,8 @@ class _CashflowDetailPageState extends State<_CashflowDetailPage> {
                           metric: _metric,
                           chartType: chartType,
                           focus: focus,
+                          lineColor: context.dashLine,
+                          labelColor: context.dashSoftMute,
                         ),
                       ),
                     );
@@ -2302,8 +2089,8 @@ class _CashStat extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: AppColors.softMute,
+          style: TextStyle(
+            color: context.dashSoftMute,
             fontSize: 11,
             fontWeight: FontWeight.w700,
           ),

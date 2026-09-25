@@ -20,7 +20,7 @@ class GoalsController extends ChangeNotifier {
 
   List<DemoGoal> _goals = [];
   String _spaceId = '';
-  bool _loading = false;
+  bool _loading = true;
 
   List<DemoGoal> get goals => List.unmodifiable(_goals);
   bool get loading => _loading;

@@ -1,23 +1,65 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-/// Loads root `.env.example` (committed) then root `.env` (gitignored overrides).
+/// Root dotenv files (no leading `.` — Flutter omits hidden assets in release):
+/// - `env` → debug (`flutter run`)
+/// - `env.staging` → profile
+/// - `env.production` → release
+///
+/// Override with `--dart-define=APP_ENV=local|staging|production`.
 class AppEnv {
   AppEnv._();
 
   static Future<void> load() async {
-    try {
-      await dotenv.load(fileName: '.env.example');
-    } catch (e) {
-      debugPrint('AppEnv: could not load .env.example ($e)');
-    }
+    final override = _envFileForMode();
+    // Load example as defaults, then override with the mode file.
+    // flutter_dotenv keeps the *first* value for duplicate keys, so the
+    // override file must be listed in [overrideWithFiles] (not mergeWith).
     try {
       await dotenv.load(
-        fileName: '.env',
-        mergeWith: Map<String, String>.from(dotenv.env),
-        isOptional: true,
+        fileName: 'env.example',
+        overrideWithFiles: [override],
       );
-    } catch (_) {}
+      // ignore: avoid_print
+      print('AppEnv: loaded $override');
+    } catch (e) {
+      // ignore: avoid_print
+      print('AppEnv: could not load $override ($e)');
+      try {
+        await dotenv.load(fileName: override);
+      } catch (e2) {
+        // ignore: avoid_print
+        print('AppEnv: fallback load failed ($e2)');
+      }
+    }
+
+    if (!isSupabaseConfigured) {
+      // ignore: avoid_print
+      print(
+        'AppEnv: Supabase not configured. Edit $override and rebuild.',
+      );
+    }
+  }
+
+  static String get activeFile => _envFileForMode();
+
+  static String _envFileForMode() {
+    const fromDefine = String.fromEnvironment('APP_ENV', defaultValue: '');
+    switch (fromDefine.trim().toLowerCase()) {
+      case 'local':
+      case 'dev':
+      case 'development':
+        return 'env';
+      case 'staging':
+        return 'env.staging';
+      case 'production':
+      case 'prod':
+        return 'env.production';
+    }
+
+    if (kReleaseMode) return 'env.production';
+    if (kProfileMode) return 'env.staging';
+    return 'env';
   }
 
   static String _get(String key) => dotenv.maybeGet(key)?.trim() ?? '';

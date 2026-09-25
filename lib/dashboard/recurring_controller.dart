@@ -19,7 +19,7 @@ class RecurringController extends ChangeNotifier {
 
   List<DemoRecurring> _items = [];
   String _spaceId = '';
-  bool _loading = false;
+  bool _loading = true;
 
   List<DemoRecurring> get items => List.unmodifiable(_items);
   bool get loading => _loading;

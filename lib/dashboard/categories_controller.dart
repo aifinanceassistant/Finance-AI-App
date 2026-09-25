@@ -113,7 +113,7 @@ class CategoriesController extends ChangeNotifier {
 
   List<CategoryRecord> _categories = [];
   String _spaceId = '';
-  bool _loading = false;
+  bool _loading = true;
 
   List<CategoryRecord> get categories => List.unmodifiable(_categories);
   bool get loading => _loading;

@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
+import '../dash_colors.dart';
 import '../data.dart';
 import '../filter_sort.dart';
+import '../shimmer.dart';
+import '../transactions_scope.dart';
 import '../ui.dart';
 
 class ReportsScreen extends StatefulWidget {
@@ -14,11 +17,10 @@ class ReportsScreen extends StatefulWidget {
 }
 
 class _ReportsScreenState extends State<ReportsScreen> {
-  int _period = 6;
+  ReportPeriod _period = ReportPeriod.m3;
   List<FilterRule> _rules = [];
   List<SortRule> _sorts = [];
   String _search = '';
-  var _showStats = false;
 
   static const _fields = [
     FilterFieldDef(id: 'merchant', label: 'Description', type: FilterFieldType.text),
@@ -44,170 +46,212 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
+  void _cyclePeriod() {
+    setState(() {
+      _period = switch (_period) {
+        ReportPeriod.month => ReportPeriod.m3,
+        ReportPeriod.m3 => ReportPeriod.ytd,
+        ReportPeriod.ytd => ReportPeriod.m12,
+        ReportPeriod.m12 => ReportPeriod.month,
+      };
+    });
+  }
+
+  Future<void> _copyCsv({
+    required List<CashflowBucket> buckets,
+    required List<DemoCategory> cats,
+    required double income,
+    required double spend,
+    required double saved,
+    required String rate,
+  }) async {
+    final buf = StringBuffer()
+      ..writeln('FinanceAI Report')
+      ..writeln('Period,${_period.label}')
+      ..writeln('Income,${income.toStringAsFixed(2)}')
+      ..writeln('Spend,${spend.toStringAsFixed(2)}')
+      ..writeln('Saved,${saved.toStringAsFixed(2)}')
+      ..writeln('Savings rate,%$rate')
+      ..writeln()
+      ..writeln('Month,Income,Spend,Net');
+    for (final b in buckets) {
+      buf.writeln(
+        '${b.label},${b.inflow.toStringAsFixed(2)},${b.outflow.toStringAsFixed(2)},${b.net.toStringAsFixed(2)}',
+      );
+    }
+    buf
+      ..writeln()
+      ..writeln('Category,Amount,Pct');
+    for (final c in cats) {
+      buf.writeln(
+        '${c.name},${c.amount.toStringAsFixed(2)},${c.pct.toStringAsFixed(1)}',
+      );
+    }
+    await Clipboard.setData(ClipboardData(text: buf.toString()));
+    if (mounted) {
+      toast(context, 'CSV summary copied · no PDF export yet');
+    }
+  }
+
+  List<_InsightLine> _buildInsights({
+    required List<DemoCategory> cats,
+    required double income,
+    required double spend,
+    required double saved,
+    required String rate,
+  }) {
+    final lines = <_InsightLine>[];
+    if (cats.isEmpty && income == 0 && spend == 0) {
+      lines.add(
+        const _InsightLine(
+          before: 'No transactions in this period yet — add a few to see trends.',
+        ),
+      );
+      return lines;
+    }
+    if (cats.isNotEmpty) {
+      final top = cats.first;
+      lines.add(
+        _InsightLine(
+          before: '${top.name} leads spend at ',
+          emphasis: moneyWhole(top.amount),
+          after: ' (${top.pct.round()}% of categorized expenses).',
+        ),
+      );
+    }
+    if (income > 0) {
+      lines.add(
+        _InsightLine(
+          before: 'Savings rate is ',
+          emphasis: '$rate%',
+          after:
+              ' on ${moneyWhole(income)} in · ${moneyWhole(spend)} out (${moneyWhole(saved)} net).',
+        ),
+      );
+    } else if (spend > 0) {
+      lines.add(
+        _InsightLine(
+          before: 'Spent ',
+          emphasis: moneyWhole(spend),
+          after: ' with no recorded income in this window.',
+        ),
+      );
+    }
+    return lines;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final searched =
-        applySearch(demoTransactions, _search, _fields, _txnValue);
+    final loading = TransactionsScope.of(context).loading;
+    final txns = TransactionsScope.of(context).transactions;
+    final searched = applySearch(txns, _search, _fields, _txnValue);
     final filtered = applySort(
       applyFilters(searched, _rules, _txnValue),
       _sorts,
       _txnValue,
     );
-    final incomeNow = filtered
-        .where((t) => t.amount > 0)
-        .fold<double>(0, (s, t) => s + t.amount);
-    final spendNow = filtered
-        .where((t) => t.amount < 0)
-        .fold<double>(0, (s, t) => s + t.amount.abs());
-    final baseIncome = incomeNow == 0 ? reportIncome.last : incomeNow;
-    final baseSpend = spendNow == 0 ? reportSpend.last : spendNow;
-    final scale = const [0.88, 0.9, 0.93, 0.91, 0.96, 0.94, 0.92, 0.95, 1.02, 0.98, 1.04, 1.0];
-    final monthsAll = const [
-      'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar',
-    ];
-    final months = monthsAll.sublist(monthsAll.length - _period);
-    final incomeSeries = scale
-        .sublist(scale.length - _period)
-        .map((f) => (baseIncome * f).roundToDouble())
-        .toList();
-    final spendSeries = scale
-        .sublist(scale.length - _period)
-        .map((f) => (baseSpend * f).roundToDouble())
-        .toList();
-    final income = incomeSeries.last;
-    final spend = spendSeries.last;
+
+    final periodTxns = txnsInReportPeriod(filtered, _period);
+    final buckets = buildCashflowBuckets(
+      periodTxns,
+      months: _period.monthCount(),
+    );
+    final incomeSeries = [for (final b in buckets) b.inflow];
+    final spendSeries = [for (final b in buckets) b.outflow];
+    final months = [for (final b in buckets) b.label];
+
+    final income = incomeSeries.fold<double>(0, (s, v) => s + v);
+    final spend = spendSeries.fold<double>(0, (s, v) => s + v);
     final saved = income - spend;
-    final rate = income == 0 ? '0.0' : ((saved / income) * 100).toStringAsFixed(1);
-    final cats = [...reportCategories]..sort((a, b) {
-        // keep visual order unless sorted via txn filters affecting KPIs only
-        return 0;
-      });
+    final rate =
+        income == 0 ? '0.0' : ((saved / income) * 100).toStringAsFixed(1);
+    final cats = categorySpendBreakdown(periodTxns);
 
     final categories = {
-      ...demoTransactions.map((t) => t.category),
+      ...filtered.map((t) => t.category),
     }.toList()
       ..sort();
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        foregroundColor: AppColors.ink,
-        elevation: 0,
-        title: const Text(
-          'Reports',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+    final insights = _buildInsights(
+      cats: cats,
+      income: income,
+      spend: spend,
+      saved: saved,
+      rate: rate,
+    );
+
+    return DashModalScaffold(
       body: ListView(
         padding: const EdgeInsets.only(bottom: 28),
         children: [
-          DashPageHeader(
+          DashFeedChrome(
             title: 'Reports',
-            subtitle: 'Cash flow and category breakdown',
-            actions: [
-              FilterSortBar(
-                fields: _fields,
-                rules: _rules,
-                sorts: _sorts,
-                search: _search,
-                onSearchChanged: (v) => setState(() => _search = v),
-                searchHint: 'Search…',
-                onRulesChanged: (r) => setState(() => _rules = r),
-                onSortsChanged: (s) => setState(() => _sorts = s),
-                selectOptions: (field) {
-                  if (field == 'status') {
-                    return TxnStatus.values.map((e) => e.name).toList();
-                  }
-                  if (field == 'category') return categories;
-                  return const [];
-                },
-                defaultFilterField: 'category',
-                defaultSortField: 'amount',
-                showStats: _showStats,
-                onShowStatsChanged: (v) => setState(() => _showStats = v),
-              ),
-              GhostButton(
-                label: 'Last $_period months',
-                onPressed: () => setState(() {
-                  _period = _period == 3 ? 6 : (_period == 6 ? 12 : 3);
-                }),
-              ),
-              AccentButton(
-                label: 'Copy summary',
-                onPressed: () async {
-                  final summary = StringBuffer()
-                    ..writeln('FinanceAI Report')
-                    ..writeln('Period: last $_period months')
-                    ..writeln('Income: ${moneyWhole(income)}')
-                    ..writeln('Spend: ${moneyWhole(spend)}')
-                    ..writeln('Saved: ${moneyWhole(saved)}')
-                    ..writeln('Savings rate: $rate%');
-                  await Clipboard.setData(ClipboardData(text: summary.toString()));
-                  if (context.mounted) {
-                    toast(context, 'Summary copied · paste into Notes or email');
-                  }
-                },
-              ),
-            ],
+            subtitle: 'Cash flow · ${_period.label}',
+            onSecondary: _cyclePeriod,
+            secondaryIcon: Icons.date_range_outlined,
+            secondaryTooltip: _period.label,
+            onPrimary: () => _copyCsv(
+              buckets: buckets,
+              cats: cats,
+              income: income,
+              spend: spend,
+              saved: saved,
+              rate: rate,
+            ),
+            primaryIcon: Icons.download_outlined,
+            primaryTooltip: 'Copy CSV summary',
+            metaLine:
+                'Income ${moneyWhole(income)} · Spend ${moneyWhole(spend)} · Saved ${moneyWhole(saved)}',
+            filterBar: FilterSortBar(
+              fields: _fields,
+              rules: _rules,
+              sorts: _sorts,
+              search: _search,
+              onSearchChanged: (v) => setState(() => _search = v),
+              searchHint: 'Search…',
+              onRulesChanged: (r) => setState(() => _rules = r),
+              onSortsChanged: (s) => setState(() => _sorts = s),
+              selectOptions: (field) {
+                if (field == 'status') {
+                  return TxnStatus.values.map((e) => e.name).toList();
+                }
+                if (field == 'category') return categories;
+                return const [];
+              },
+              defaultFilterField: 'category',
+              defaultSortField: 'amount',
+              iconButtons: true,
+              expandSearch: true,
+            ),
           ),
-          if (_showStats) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+            child: _PeriodChips(
+              value: _period,
+              onChanged: (p) => setState(() => _period = p),
+            ),
+          ),
+          if (loading)
+            const DashLoadingBody(kpiCount: 1, listRows: 5)
+          else
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DashKpi(
-                          label: 'Income',
-                          value: moneyWhole(income),
-                        ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 8, 0, 6),
+                    child: Text(
+                      'Income vs spend · ${_period.label}',
+                      style: TextStyle(
+                        color: context.dashMute,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: DashKpi(
-                          label: 'Spend',
-                          value: moneyWhole(spend),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DashKpi(
-                          label: 'Saved',
-                          value: moneyWhole(saved),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: DashKpi(
-                          label: 'Savings rate',
-                          value: '$rate%',
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: DashPanel(
-              child: Column(
-                children: [
-                  DashPanelHeader(
-                    title: 'Income vs spend',
-                    subtitle: 'Last $_period months',
+                    ),
                   ),
                   const Padding(
-                    padding: EdgeInsets.fromLTRB(12, 8, 12, 8),
+                    padding: EdgeInsets.only(bottom: 8),
                     child: Row(
                       children: [
                         _Legend(color: Color(0xFFC7C3FF), label: 'Income'),
@@ -216,136 +260,168 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ],
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-                    child: IncomeSpendBars(
+                  if (periodTxns.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 36),
+                      child: Text(
+                        'No transactions in ${_period.label.toLowerCase()}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: context.dashMute,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    )
+                  else
+                    IncomeSpendBars(
                       months: months,
                       income: incomeSeries,
                       spend: spendSeries,
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: DashPanel(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Spend by category',
-                    style: TextStyle(
-                      color: AppColors.ink,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
+                  const SizedBox(height: 20),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 0, 0, 6),
+                    child: Text(
+                      'Spend by category',
+                      style: TextStyle(
+                        color: context.dashMute,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  const Text(
-                    'This month',
-                    style: TextStyle(color: AppColors.mute, fontSize: 13),
-                  ),
-                  const SizedBox(height: 16),
-                  for (final c in cats) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            c.name,
-                            style: const TextStyle(
-                              color: AppColors.ink,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '${moneyWhole(c.amount)} · ${((c.amount / spend) * 100).round()}%',
-                          style: const TextStyle(
-                            color: AppColors.mute,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    ProgressTrack(
-                      progress: c.amount / spend,
-                      color: c.color,
-                      height: 6,
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: DashPanel(
-              child: Column(
-                children: [
-                  const DashPanelHeader(
-                    title: 'Insights',
-                    subtitle: 'Generated from your linked activity',
-                  ),
-                  _Insight(
-                    spans: [
-                      const TextSpan(text: 'Dining is '),
-                      TextSpan(
-                        text:
-                            '${DisplayCurrency.symbolFor(DisplayCurrency.code)}30 over',
-                        style: const TextStyle(
-                          color: AppColors.ink,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const TextSpan(
-                        text: ' budget this month, mostly weekends.',
-                      ),
-                    ],
-                  ),
-                  _Insight(
-                    spans: [
-                      const TextSpan(text: 'Subscriptions are steady at '),
-                      TextSpan(
-                        text: moneyWhole(89),
-                        style: const TextStyle(
-                          color: AppColors.ink,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      TextSpan(
-                        text:
-                            ', under your ${moneyWhole(120)} cap.',
-                      ),
-                    ],
-                  ),
-                  _Insight(
-                    spans: [
-                      const TextSpan(
-                        text:
-                            "You're on track to hit the emergency fund goal by ",
-                      ),
-                      TextSpan(
-                        text: 'November',
+                  if (cats.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      child: Text(
+                        'No expense categories yet',
                         style: TextStyle(
-                          color: AppColors.ink,
-                          fontWeight: FontWeight.w700,
+                          color: context.dashMute,
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
-                      const TextSpan(text: ' at the current pace.'),
-                    ],
+                    )
+                  else
+                    for (final c in cats)
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(color: context.dashLine),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    c.name,
+                                    style: TextStyle(
+                                      color: context.dashInk,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  '${moneyWhole(c.amount)} · ${spend == 0 ? 0 : ((c.amount / spend) * 100).round()}%',
+                                  style: TextStyle(
+                                    color: context.dashMute,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            ProgressTrack(
+                              progress: spend == 0 ? 0 : c.amount / spend,
+                              color: c.color,
+                              height: 4,
+                            ),
+                          ],
+                        ),
+                      ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 8, 0, 6),
+                    child: Text(
+                      'Insights',
+                      style: TextStyle(
+                        color: context.dashMute,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
+                  for (final line in insights)
+                    _Insight(line: line),
                 ],
               ),
             ),
-          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InsightLine {
+  const _InsightLine({
+    required this.before,
+    this.emphasis,
+    this.after,
+  });
+
+  final String before;
+  final String? emphasis;
+  final String? after;
+}
+
+class _PeriodChips extends StatelessWidget {
+  const _PeriodChips({required this.value, required this.onChanged});
+
+  final ReportPeriod value;
+  final ValueChanged<ReportPeriod> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: context.dashPanel,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.dashLine),
+      ),
+      child: Row(
+        children: [
+          for (final p in ReportPeriod.values)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onChanged(p),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: value == p
+                        ? context.dashElevated
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    p.shortLabel,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight:
+                          value == p ? FontWeight.w700 : FontWeight.w500,
+                      color: value == p ? context.dashInk : context.dashMute,
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -373,8 +449,8 @@ class _Legend extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          style: const TextStyle(
-            color: AppColors.mute,
+          style: TextStyle(
+            color: context.dashMute,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
@@ -385,26 +461,34 @@ class _Legend extends StatelessWidget {
 }
 
 class _Insight extends StatelessWidget {
-  const _Insight({required this.spans});
+  const _Insight({required this.line});
 
-  final List<InlineSpan> spans;
+  final _InsightLine line;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.line)),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: context.dashLine)),
       ),
       child: Text.rich(
         TextSpan(
-          style: const TextStyle(
-            color: Color(0xFF3C4257),
+          style: TextStyle(
+            color: context.dashInk,
             fontSize: 14,
             height: 1.4,
           ),
-          children: spans,
+          children: [
+            TextSpan(text: line.before),
+            if (line.emphasis != null)
+              TextSpan(
+                text: line.emphasis,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            if (line.after != null) TextSpan(text: line.after),
+          ],
         ),
       ),
     );

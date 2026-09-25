@@ -6,12 +6,18 @@ import '../theme/app_theme.dart';
 import '../variations/models.dart';
 import 'accounts_controller.dart';
 import 'accounts_scope.dart';
+import 'agent_chat.dart';
+import 'agent_mode.dart';
+import 'bottom_nav.dart';
 import 'categories_controller.dart';
 import 'categories_scope.dart';
+import 'command_search.dart';
+import 'dash_colors.dart';
 import 'goals_controller.dart';
 import 'goals_scope.dart';
 import 'investments_controller.dart';
 import 'investments_scope.dart';
+import 'notifications_center.dart';
 import 'recurring_controller.dart';
 import 'recurring_scope.dart';
 import 'screens/accounts_screen.dart';
@@ -46,10 +52,14 @@ class DashboardShell extends StatefulWidget {
   State<DashboardShell> createState() => _DashboardShellState();
 }
 
-class _DashboardShellState extends State<DashboardShell> {
+class _DashboardShellState extends State<DashboardShell>
+    with WidgetsBindingObserver {
   late DashTab _tab = widget.initialTab;
   late final PageController _pages = PageController(initialPage: _tab.index);
   String? _txnCategoryFilter;
+  var _openReconcile = false;
+  var _agentMode = false;
+  var _agentModeHydrated = false;
   SpacesController? _spaces;
   AccountsController? _accounts;
   TransactionsController? _transactions;
@@ -65,6 +75,63 @@ class _DashboardShellState extends State<DashboardShell> {
   var _ownedInvestments = false;
   var _ownedGoals = false;
   String? _dataSpaceId;
+  DateTime? _lastResumeRefresh;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // ignore: discarded_futures
+    _hydrateAgentMode();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final last = _lastResumeRefresh;
+    if (last != null &&
+        DateTime.now().difference(last) < const Duration(minutes: 2)) {
+      return;
+    }
+    _lastResumeRefresh = DateTime.now();
+    // ignore: discarded_futures
+    _refreshSpaceData();
+  }
+
+  Future<void> _hydrateAgentMode() async {
+    final on = await readStoredAgentMode();
+    if (!mounted) return;
+    setState(() {
+      _agentMode = on;
+      _agentModeHydrated = true;
+      if (on) {
+        _tab = DashTab.home;
+        _txnCategoryFilter = null;
+        _openReconcile = false;
+      }
+    });
+    if (on && _pages.hasClients) {
+      _pages.jumpToPage(DashTab.home.index);
+    }
+  }
+
+  void _setAgentMode(bool on) {
+    setState(() {
+      _agentMode = on;
+      _tab = DashTab.home;
+      _txnCategoryFilter = null;
+      _openReconcile = false;
+    });
+    if (_pages.hasClients) {
+      _pages.jumpToPage(DashTab.home.index);
+    }
+    if (_agentModeHydrated) {
+      // ignore: discarded_futures
+      writeStoredAgentMode(on);
+    }
+  }
+
+  void _enterAgentMode() => _setAgentMode(true);
 
   @override
   void didChangeDependencies() {
@@ -127,6 +194,7 @@ class _DashboardShellState extends State<DashboardShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pages.dispose();
     _spaces?.removeListener(_onSpacesChanged);
     if (_ownedSpaces) _spaces?.dispose();
@@ -142,6 +210,9 @@ class _DashboardShellState extends State<DashboardShell> {
   void _go(DashTab tab, {String? categoryFilter, bool clearFilter = false}) {
     setState(() {
       _tab = tab;
+      if (tab != DashTab.transactions) {
+        _openReconcile = false;
+      }
       if (tab == DashTab.transactions) {
         if (clearFilter) {
           _txnCategoryFilter = null;
@@ -153,6 +224,76 @@ class _DashboardShellState extends State<DashboardShell> {
       }
     });
     _pages.jumpToPage(tab.index);
+  }
+
+  void _goReconcile() {
+    setState(() {
+      _tab = DashTab.transactions;
+      _txnCategoryFilter = null;
+      _openReconcile = true;
+    });
+    _pages.jumpToPage(DashTab.transactions.index);
+    // Clear the one-shot flag after the screen has a chance to open the sheet.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _openReconcile = false);
+    });
+  }
+
+  void _openCommandSearch(BuildContext scopedContext) {
+    // Must use a context under SpacesScope / *Scope — State.context is above them.
+    // ignore: discarded_futures
+    showCommandSearch(
+      scopedContext,
+      onSelectTab: (tab) => _go(tab, clearFilter: tab == DashTab.transactions),
+      onOpenPage: _handleCommandPage,
+      onSelectSpace: (id) {
+        // ignore: discarded_futures
+        _spaces?.select(id);
+      },
+    );
+  }
+
+  void _handleCommandPage(CommandPage page) {
+    switch (page) {
+      case CommandPage.home:
+        _go(DashTab.home);
+      case CommandPage.transactions:
+        _go(DashTab.transactions, clearFilter: true);
+      case CommandPage.categories:
+        _go(DashTab.categories);
+      case CommandPage.accounts:
+        _go(DashTab.accounts);
+      case CommandPage.more:
+        _go(DashTab.more);
+      case CommandPage.settings:
+        _openSettings();
+      case CommandPage.reports:
+        _openReports();
+      case CommandPage.goals:
+        _openGoals();
+      case CommandPage.investments:
+        _openInvestments();
+      case CommandPage.recurring:
+        _openRecurring();
+      case CommandPage.team:
+        _openUsersPermissions();
+    }
+  }
+
+  void _handleNotification(DashNotification n) {
+    switch (n.category) {
+      case NotifCategory.billing:
+        _openSettings(section: 'plan');
+      case NotifCategory.accounts:
+        _go(DashTab.accounts);
+      case NotifCategory.budgets:
+        _go(DashTab.categories);
+      case NotifCategory.security:
+        _openSettings(section: 'security');
+      case NotifCategory.system:
+        break;
+    }
   }
 
   Widget _withSpaces(Widget child) {
@@ -170,12 +311,10 @@ class _DashboardShellState extends State<DashboardShell> {
       toast(context, 'Upgrade to unlock Goals');
       return;
     }
-    final style = DashVariantStyle.forVariation(
-      VariationScope.read(context).dashboard,
-    );
+    final style = DashVariantStyle.of(context);
     final goals = _goals ?? GoalsController.fake();
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      dashModalRoute<void>(
         builder: (_) => _withSpaces(
           GoalsScope(
             controller: goals,
@@ -193,15 +332,17 @@ class _DashboardShellState extends State<DashboardShell> {
   }
 
   void _openReports() {
-    final style = DashVariantStyle.forVariation(
-      VariationScope.read(context).dashboard,
-    );
+    final style = DashVariantStyle.of(context);
+    final transactions = _transactions ?? TransactionsController.fake();
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      dashModalRoute<void>(
         builder: (_) => _withSpaces(
-          DashStyleScope(
-            style: style,
-            child: const ReportsScreen(),
+          TransactionsScope(
+            controller: transactions,
+            child: DashStyleScope(
+              style: style,
+              child: const ReportsScreen(),
+            ),
           ),
         ),
       ),
@@ -209,12 +350,10 @@ class _DashboardShellState extends State<DashboardShell> {
   }
 
   void _openRecurring() {
-    final style = DashVariantStyle.forVariation(
-      VariationScope.read(context).dashboard,
-    );
+    final style = DashVariantStyle.of(context);
     final recurring = _recurring ?? RecurringController.fake();
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      dashModalRoute<void>(
         builder: (_) => _withSpaces(
           RecurringScope(
             controller: recurring,
@@ -235,12 +374,10 @@ class _DashboardShellState extends State<DashboardShell> {
       toast(context, 'Upgrade to unlock Investments');
       return;
     }
-    final style = DashVariantStyle.forVariation(
-      VariationScope.read(context).dashboard,
-    );
+    final style = DashVariantStyle.of(context);
     final investments = _investments ?? InvestmentsController.fake();
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      dashModalRoute<void>(
         builder: (_) => _withSpaces(
           InvestmentsScope(
             controller: investments,
@@ -255,18 +392,25 @@ class _DashboardShellState extends State<DashboardShell> {
   }
 
   void _openSettings({String section = 'general'}) {
-    final style = DashVariantStyle.forVariation(
-      VariationScope.read(context).dashboard,
-    );
+    final style = DashVariantStyle.of(context);
+    final accounts = _accounts;
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      dashModalRoute<void>(
         builder: (_) => _withSpaces(
           DashStyleScope(
             style: style,
-            child: SettingsScreen(
-              onLogout: _confirmLogout,
-              initialSection: section,
-            ),
+            child: accounts != null
+                ? AccountsScope(
+                    controller: accounts,
+                    child: SettingsScreen(
+                      onLogout: _confirmLogout,
+                      initialSection: section,
+                    ),
+                  )
+                : SettingsScreen(
+                    onLogout: _confirmLogout,
+                    initialSection: section,
+                  ),
           ),
         ),
       ),
@@ -274,11 +418,9 @@ class _DashboardShellState extends State<DashboardShell> {
   }
 
   void _openUsersPermissions() {
-    final style = DashVariantStyle.forVariation(
-      VariationScope.read(context).dashboard,
-    );
+    final style = DashVariantStyle.of(context);
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      dashModalRoute<void>(
         builder: (_) => _withSpaces(
           DashStyleScope(
             style: style,
@@ -429,9 +571,9 @@ class _DashboardShellState extends State<DashboardShell> {
 
   @override
   Widget build(BuildContext context) {
-    final style = DashVariantStyle.forVariation(
-      VariationScope.read(context).dashboard,
-    );
+    // Rebuild when appearance (light/dark) changes.
+    VariationScope.of(context);
+    final style = DashVariantStyle.of(context);
     final spaces = _spaces ?? SpacesController.fake();
     final accounts = _accounts ?? AccountsController.fake();
     final transactions = _transactions ?? TransactionsController.fake();
@@ -455,134 +597,182 @@ class _DashboardShellState extends State<DashboardShell> {
                 child: GoalsScope(
                   controller: goals,
                   child: ListenableBuilder(
-                listenable: Listenable.merge([
-                  spaces,
-                  accounts,
-                  transactions,
-                  categories,
-                  recurring,
-                  investments,
-                  goals,
-                ]),
-                builder: (context, _) {
-              return DashStyleScope(
-                style: style,
-                child: Scaffold(
-                  backgroundColor: style.scaffold,
-                  body: SafeArea(
-                    bottom: false,
-                    child: Column(
-                      children: [
-                        const SpaceSwitcherBar(),
-                        Expanded(
-                          child: PageView(
-                            controller: _pages,
-                            physics: const NeverScrollableScrollPhysics(),
-                            children: [
-                              HomeScreen(
-                                style: style,
-                                onViewTransactions: () =>
-                                    _go(DashTab.transactions, clearFilter: true),
-                                onViewAccounts: () => _go(DashTab.accounts),
-                                onViewCategories: () => _go(DashTab.categories),
-                                onViewGoals: () => _openGoals(
-                                  openContribute: true,
-                                  contributeGoalName: 'Emergency fund',
-                                ),
-                                onConnectBank: _connectBank,
-                              ),
-                              TransactionsScreen(
-                                categoryFilter: _txnCategoryFilter,
-                              ),
-                              CategoriesScreen(
-                                onOpenCategory: (name) => _go(
-                                  DashTab.transactions,
-                                  categoryFilter: name,
-                                ),
-                              ),
-                              const AccountsScreen(),
-                              MoreScreen(
-                                onRecurring: _openRecurring,
-                                onInvestments: _openInvestments,
-                                onGoals: _openGoals,
-                                onReports: _openReports,
-                                onSettings: _openSettings,
-                                onUsersPermissions: _openUsersPermissions,
-                                onManagePlan: () =>
-                                    _openSettings(section: 'plan'),
-                                onLogout: _confirmLogout,
-                                showGoals: spaces.hasFeature('goals'),
-                                showInvestments:
-                                    spaces.hasFeature('investments'),
-                              ),
-                            ],
-                          ),
+                    listenable: Listenable.merge([
+                      spaces,
+                      accounts,
+                      transactions,
+                      categories,
+                      recurring,
+                      investments,
+                      goals,
+                    ]),
+                    builder: (context, _) {
+                      return DashStyleScope(
+                        style: style,
+                        child: _shellChrome(
+                          context: context,
+                          style: style,
+                          spaces: spaces,
                         ),
-                      ],
-                    ),
-                  ),
-                  bottomNavigationBar: NavigationBar(
-                    height: 68,
-                    backgroundColor: style.navBackground,
-                    indicatorColor: style.primary.withValues(alpha: 0.12),
-                    selectedIndex: _tab.index,
-                    onDestinationSelected: (i) {
-                      final tab = DashTab.values[i];
-                      _go(tab, clearFilter: tab == DashTab.transactions);
+                      );
                     },
-                    labelBehavior: MediaQuery.sizeOf(context).width < 380
-                        ? NavigationDestinationLabelBehavior.onlyShowSelected
-                        : NavigationDestinationLabelBehavior.alwaysShow,
-                    destinations: [
-                      const NavigationDestination(
-                        icon: Icon(Icons.home_outlined),
-                        selectedIcon:
-                            Icon(Icons.home_rounded, color: AppColors.brand),
-                        label: 'Home',
-                      ),
-                      NavigationDestination(
-                        icon: const Icon(Icons.receipt_long_outlined),
-                        selectedIcon: Icon(
-                          Icons.receipt_long_rounded,
-                          color: style.primary,
-                        ),
-                        label: style.navLabel,
-                      ),
-                      NavigationDestination(
-                        icon: const Icon(Icons.label_outline_rounded),
-                        selectedIcon: Icon(
-                          Icons.label_rounded,
-                          color: style.primary,
-                        ),
-                        label: 'Categories',
-                      ),
-                      NavigationDestination(
-                        icon: const Icon(Icons.account_balance_outlined),
-                        selectedIcon: Icon(
-                          Icons.account_balance_rounded,
-                          color: style.primary,
-                        ),
-                        label: 'Accounts',
-                      ),
-                      NavigationDestination(
-                        icon: const Icon(Icons.grid_view_outlined),
-                        selectedIcon: Icon(
-                          Icons.grid_view_rounded,
-                          color: style.primary,
-                        ),
-                        label: 'More',
-                      ),
-                    ],
                   ),
                 ),
-              );
-            },
+              ),
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  List<Widget> _tabPages(SpacesController spaces, DashVariantStyle style) {
+    return [
+      HomeScreen(
+        style: style,
+        onRefresh: _refreshSpaceData,
+        onViewTransactions: () =>
+            _go(DashTab.transactions, clearFilter: true),
+        onViewAccounts: () => _go(DashTab.accounts),
+        onViewCategories: () => _go(DashTab.categories),
+        onViewGoals: () => _openGoals(
+          openContribute: true,
+          contributeGoalName: 'Emergency fund',
+        ),
+        onConnectBank: _connectBank,
+        onOpenAgent: _enterAgentMode,
       ),
+      TransactionsScreen(
+        categoryFilter: _txnCategoryFilter,
+        openReconcileOnStart: _openReconcile,
+        onRefresh: _refreshSpaceData,
       ),
+      CategoriesScreen(
+        onOpenCategory: (name) => _go(
+          DashTab.transactions,
+          categoryFilter: name,
+        ),
+        onRefresh: _refreshSpaceData,
       ),
+      AccountsScreen(onRefresh: _refreshSpaceData),
+      MoreScreen(
+        onRecurring: _openRecurring,
+        onInvestments: _openInvestments,
+        onGoals: _openGoals,
+        onReports: _openReports,
+        onSettings: _openSettings,
+        onUsersPermissions: _openUsersPermissions,
+        onManagePlan: () => _openSettings(section: 'plan'),
+        onReconcile: _goReconcile,
+        onAgentMode: _enterAgentMode,
+        onLogout: _confirmLogout,
+        onRefresh: _refreshSpaceData,
+        showGoals: spaces.hasFeature('goals'),
+        showInvestments: spaces.hasFeature('investments'),
+      ),
+    ];
+  }
+
+  Future<void> _refreshSpaceData() async {
+    final spaces = _spaces;
+    final id = spaces?.spaceId;
+    if (spaces == null || id == null || id.isEmpty) return;
+    await Future.wait([
+      spaces.load(),
+      if (_accounts != null) _accounts!.loadForSpace(id),
+      if (_transactions != null) _transactions!.loadForSpace(id),
+      if (_categories != null) _categories!.loadForSpace(id),
+      if (_recurring != null) _recurring!.loadForSpace(id),
+      if (_investments != null) _investments!.loadForSpace(id),
+      if (_goals != null) _goals!.loadForSpace(id),
+    ]);
+  }
+
+  Widget _pageView(SpacesController spaces, DashVariantStyle style) {
+    return PageView(
+      controller: _pages,
+      physics: const NeverScrollableScrollPhysics(),
+      children: _tabPages(spaces, style),
+    );
+  }
+
+  Widget _shellChrome({
+    required BuildContext context,
+    required DashVariantStyle style,
+    required SpacesController spaces,
+  }) {
+    // Agent mode: keep space switcher + exit only (hide search/bell/nav).
+    // Enter agent mode via long-press on the home greeting mascot.
+    final chromeActions = <Widget>[
+      if (_agentMode)
+        IconButton(
+          tooltip: 'Exit agent mode',
+          onPressed: () => _setAgentMode(false),
+          icon: Icon(Icons.close_rounded, color: context.dashInk, size: 22),
+        )
+      else ...[
+        IconButton(
+          tooltip: 'Search',
+          onPressed: () => _openCommandSearch(context),
+          icon: Icon(
+            Icons.search_rounded,
+            color: context.dashInk,
+            size: 22,
+          ),
+        ),
+        NotificationBellButton(onOpenItem: _handleNotification),
+      ],
+    ];
+
+    final Widget spaceBar;
+    if (style.showSpaceBar || _agentMode) {
+      spaceBar = SpaceSwitcherBar(trailing: chromeActions);
+    } else {
+      spaceBar = SizedBox(
+        height: 48,
+        child: Row(
+          children: [
+            const Spacer(),
+            ...chromeActions,
+            const SizedBox(width: 4),
+          ],
+        ),
+      );
+    }
+
+    return DashNavChrome(
+      selected: _tab,
+      style: style,
+      spaceBar: spaceBar,
+      hideBottomNav: _agentMode,
+      onSelect: (tab) => _go(
+        tab,
+        clearFilter: tab == DashTab.transactions,
+      ),
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 380),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, anim) {
+          final curved = CurvedAnimation(
+            parent: anim,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.96, end: 1).animate(curved),
+              child: child,
+            ),
+          );
+        },
+        child: KeyedSubtree(
+          key: ValueKey(_agentMode ? 'agent' : 'dash'),
+          child: _agentMode
+              ? const AgentModeSurface()
+              : _pageView(spaces, style),
+        ),
       ),
     );
   }

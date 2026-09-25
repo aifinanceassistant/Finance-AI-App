@@ -3,58 +3,66 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../variations/models.dart';
 
-enum DashHomeLayout { briefing }
-
 enum DashNavStyle { material }
 
+enum DashHomeLayout { briefing }
+
+enum DashHeaderStyle { classic, terminal, minimal }
+
+/// Briefing chrome — Classic home only.
 class DashVariantStyle {
   const DashVariantStyle({
+    required this.variation,
+    required this.navStyle,
+    required this.homeLayout,
+    required this.headerStyle,
     required this.primary,
     required this.scaffold,
     required this.radius,
-    required this.showTopBar,
-    required this.navStyle,
-    required this.homeLayout,
     required this.navLabel,
     required this.navBackground,
-    required this.topBarTinted,
+    required this.showSpaceBar,
     required this.denseTopBar,
-    required this.inkTopBar,
-    required this.extendBody,
-    required this.minimalChrome,
   });
 
+  final DashboardVariation variation;
+  final DashNavStyle navStyle;
+  final DashHomeLayout homeLayout;
+  final DashHeaderStyle headerStyle;
   final Color primary;
   final Color scaffold;
   final double radius;
-  final bool showTopBar;
-  final DashNavStyle navStyle;
-  final DashHomeLayout homeLayout;
   final String navLabel;
   final Color navBackground;
-  final bool topBarTinted;
+  final bool showSpaceBar;
   final bool denseTopBar;
-  final bool inkTopBar;
-  final bool extendBody;
-  final bool minimalChrome;
 
-  static DashVariantStyle forVariation(DashboardVariation v) => switch (v) {
-        DashboardVariation.briefing => const DashVariantStyle(
-            primary: AppColors.brand,
-            scaffold: AppColors.surface,
-            radius: 12,
-            showTopBar: false,
-            navStyle: DashNavStyle.material,
-            homeLayout: DashHomeLayout.briefing,
-            navLabel: 'Activity',
-            navBackground: Colors.white,
-            topBarTinted: false,
-            denseTopBar: false,
-            inkTopBar: false,
-            extendBody: false,
-            minimalChrome: false,
-          ),
-      };
+  static DashVariantStyle of(BuildContext context) {
+    return forVariation(DashboardVariation.briefing, context);
+  }
+
+  static DashVariantStyle forVariation(
+    DashboardVariation variation,
+    BuildContext context,
+  ) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final surface = dark ? AppColors.surfaceDark : AppColors.surface;
+    final panel = dark ? AppColors.panelDark : AppColors.panel;
+
+    return DashVariantStyle(
+      variation: DashboardVariation.briefing,
+      navStyle: DashNavStyle.material,
+      homeLayout: DashHomeLayout.briefing,
+      headerStyle: DashHeaderStyle.classic,
+      primary: AppColors.brand,
+      scaffold: surface,
+      radius: 12,
+      navLabel: 'Activity',
+      navBackground: panel,
+      showSpaceBar: true,
+      denseTopBar: false,
+    );
+  }
 }
 
 class DashStyleScope extends InheritedWidget {

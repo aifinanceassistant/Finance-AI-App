@@ -47,6 +47,7 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 
-.env
-.env.staging
-.env.production
+# Mobile secrets (committed: env.example only)
+env
+env.staging
+env.production

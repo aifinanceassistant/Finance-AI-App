@@ -15,6 +15,10 @@ class AccountsScope extends InheritedNotifier<AccountsController> {
     return scope!.notifier!;
   }
 
+  static AccountsController? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<AccountsScope>()?.notifier;
+  }
+
   static AccountsController read(BuildContext context) {
     final scope = context.getInheritedWidgetOfExactType<AccountsScope>();
     assert(scope != null, 'AccountsScope not found');

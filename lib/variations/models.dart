@@ -1,14 +1,5 @@
 import 'package:flutter/material.dart';
 
-enum DashboardVariation { briefing }
-
-extension DashboardVariationX on DashboardVariation {
-  String get label => 'Briefing';
-
-  String get blurb =>
-      'Classic labeled nav with a morning digest, focus goal, and next actions';
-}
-
 enum AppAppearance { light, dark, system }
 
 extension AppAppearanceX on AppAppearance {
@@ -19,7 +10,7 @@ extension AppAppearanceX on AppAppearance {
       };
 
   String get blurb => switch (this) {
-        AppAppearance.light => 'Bright surfaces and dark ink',
+        AppAppearance.light => 'Bright surfaces and navy ink',
         AppAppearance.dark => 'Dim chrome for low-light sessions',
         AppAppearance.system => 'Follow your device preference',
       };
@@ -31,9 +22,51 @@ extension AppAppearanceX on AppAppearance {
       };
 }
 
+/// Locked to Classic home (kept for style wiring).
+enum DashboardVariation { briefing }
+
+extension DashboardVariationX on DashboardVariation {
+  String get label => 'Classic';
+  String get blurb => 'Greeting, net worth, and recent transactions';
+  IconData get icon => Icons.wb_sunny_outlined;
+}
+
+/// Agent-mode layout candidates (web-faithful).
+enum AgentLayoutVariation { web, drawer, strip }
+
+extension AgentLayoutVariationX on AgentLayoutVariation {
+  String get label => switch (this) {
+        AgentLayoutVariation.web => 'Web',
+        AgentLayoutVariation.drawer => 'Drawer',
+        AgentLayoutVariation.strip => 'Strip',
+      };
+
+  String get blurb => switch (this) {
+        AgentLayoutVariation.web =>
+          'Agents + recents sidebar beside chat (web desktop)',
+        AgentLayoutVariation.drawer =>
+          'Full chat; hamburger opens agents + history',
+        AgentLayoutVariation.strip =>
+          'Pixel agent strip under header, chat below',
+      };
+
+  IconData get icon => switch (this) {
+        AgentLayoutVariation.web => Icons.view_sidebar_outlined,
+        AgentLayoutVariation.drawer => Icons.menu_open_rounded,
+        AgentLayoutVariation.strip => Icons.view_week_outlined,
+      };
+}
+
 class VariationController extends ChangeNotifier {
-  DashboardVariation dashboard = DashboardVariation.briefing;
   AppAppearance appearance = AppAppearance.light;
+  DashboardVariation dashboard = DashboardVariation.briefing;
+  AgentLayoutVariation agentLayout = AgentLayoutVariation.web;
+
+  void setAppearance(AppAppearance value) {
+    if (appearance == value) return;
+    appearance = value;
+    notifyListeners();
+  }
 
   void setDashboard(DashboardVariation value) {
     if (dashboard == value) return;
@@ -41,9 +74,9 @@ class VariationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setAppearance(AppAppearance value) {
-    if (appearance == value) return;
-    appearance = value;
+  void setAgentLayout(AgentLayoutVariation value) {
+    if (agentLayout == value) return;
+    agentLayout = value;
     notifyListeners();
   }
 }

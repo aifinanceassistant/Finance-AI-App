@@ -8,6 +8,7 @@ import 'auth/auth_controller.dart';
 import 'auth/auth_scope.dart';
 import 'dashboard/shell.dart';
 import 'dashboard/shimmer.dart';
+import 'locale/locale_controller.dart';
 import 'onboarding/onboarding_flow.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/landing_screen.dart';
@@ -39,14 +40,18 @@ Future<void> main() async {
   final auth = AuthController.supabase();
   await auth.init();
 
-  runApp(FinanceAiApp(auth: auth));
+  final locale = LocaleController();
+  await locale.load();
+
+  runApp(FinanceAiApp(auth: auth, locale: locale));
 }
 
 class FinanceAiApp extends StatefulWidget {
-  const FinanceAiApp({super.key, this.auth});
+  const FinanceAiApp({super.key, this.auth, this.locale});
 
   /// When null (widget tests), a fake controller is created.
   final AuthController? auth;
+  final LocaleController? locale;
 
   @override
   State<FinanceAiApp> createState() => _FinanceAiAppState();
@@ -56,7 +61,10 @@ class _FinanceAiAppState extends State<FinanceAiApp> {
   late final VariationController _variations = VariationController();
   late final AuthController _auth =
       widget.auth ?? AuthController.fake();
+  late final LocaleController _locale =
+      widget.locale ?? LocaleController();
   var _ownedFake = false;
+  var _ownedLocale = false;
 
   @override
   void initState() {
@@ -66,17 +74,23 @@ class _FinanceAiAppState extends State<FinanceAiApp> {
       // ignore: discarded_futures
       _auth.init();
     }
+    if (widget.locale == null) {
+      _ownedLocale = true;
+      // ignore: discarded_futures
+      _locale.load();
+    }
   }
 
   @override
   void dispose() {
     _variations.dispose();
     if (_ownedFake) _auth.dispose();
+    if (_ownedLocale) _locale.dispose();
     super.dispose();
   }
 
   Widget get _home {
-    if (!_auth.ready || _auth.loading) {
+    if (!_auth.ready || _auth.loading || _auth.profilePending) {
       return Scaffold(
         backgroundColor: AppColors.surface,
         body: SafeArea(
@@ -112,20 +126,30 @@ class _FinanceAiAppState extends State<FinanceAiApp> {
   Widget build(BuildContext context) {
     return AuthScope(
       controller: _auth,
-      child: VariationScope(
-        controller: _variations,
-        child: ListenableBuilder(
-          listenable: Listenable.merge([_variations, _auth]),
-          builder: (context, _) {
-            return MaterialApp(
-              title: 'FinanceAI',
-              debugShowCheckedModeBanner: false,
-              theme: AppTheme.light,
-              darkTheme: AppTheme.dark,
-              themeMode: _variations.appearance.themeMode,
-              home: _home,
-            );
-          },
+      child: LocaleScope(
+        controller: _locale,
+        child: VariationScope(
+          controller: _variations,
+          child: ListenableBuilder(
+            listenable: Listenable.merge([_variations, _auth, _locale]),
+            builder: (context, _) {
+              return MaterialApp(
+                // Remount once on sign-in/out so the auth stack can't sit under the dashboard.
+                key: ValueKey<bool>(_auth.isSignedIn),
+                title: 'FinanceAI',
+                debugShowCheckedModeBanner: false,
+                theme: AppTheme.light,
+                darkTheme: AppTheme.dark,
+                themeMode: _variations.appearance.themeMode,
+                locale: _locale.locale,
+                supportedLocales: const [
+                  Locale('en'),
+                  Locale('fr'),
+                ],
+                home: _home,
+              );
+            },
+          ),
         ),
       ),
     );

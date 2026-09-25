@@ -4,6 +4,7 @@ import '../auth/auth_scope.dart';
 import '../dashboard/shell.dart';
 import 'models.dart';
 import 'onboarding_shell.dart';
+import 'persist_accounts.dart';
 import 'steps/accounts_step.dart';
 import 'steps/hear_step.dart';
 import 'steps/moves_step.dart';
@@ -33,8 +34,10 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     });
   }
 
-  void _finish() async {
-    await AuthScope.read(context).completeOnboarding();
+  Future<void> _finish() async {
+    final auth = AuthScope.read(context);
+    await auth.completeOnboarding();
+    await persistOnboardingAccounts(auth, _state.accounts);
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const DashboardShell()),

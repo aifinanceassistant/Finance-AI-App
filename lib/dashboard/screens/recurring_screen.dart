@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
+import '../dash_colors.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
 import '../filter_sort.dart';
@@ -114,7 +115,6 @@ class _RecurringScreenState extends State<RecurringScreen> {
   List<FilterRule> _filterRules = [];
   List<SortRule> _sortRules = [];
   String _search = '';
-  var _showStats = false;
 
   RecurringController get _ctrl => RecurringScope.of(context);
   List<DemoRecurring> get _recurring => _ctrl.items;
@@ -661,12 +661,12 @@ class _RecurringScreenState extends State<RecurringScreen> {
       description: 'Upcoming charges and deposits by date',
       builder: (ctx, setSheetState) {
         if (groups.isEmpty) {
-          return const Padding(
+          return Padding(
             padding: EdgeInsets.symmetric(vertical: 24),
             child: Text(
               'Nothing scheduled',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.softMute, fontSize: 13),
+              style: TextStyle(color: context.dashSoftMute, fontSize: 13),
             ),
           );
         }
@@ -678,8 +678,8 @@ class _RecurringScreenState extends State<RecurringScreen> {
                 padding: const EdgeInsets.only(bottom: 8, top: 4),
                 child: Text(
                   entry.key.toUpperCase(),
-                  style: const TextStyle(
-                    color: AppColors.softMute,
+                  style: TextStyle(
+                    color: context.dashSoftMute,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.6,
@@ -689,7 +689,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.line),
+                  border: Border.all(color: context.dashLine),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Column(
@@ -699,8 +699,8 @@ class _RecurringScreenState extends State<RecurringScreen> {
                         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                         decoration: BoxDecoration(
                           border: i < entry.value.length - 1
-                              ? const Border(
-                                  bottom: BorderSide(color: AppColors.line),
+                              ? Border(
+                                  bottom: BorderSide(color: context.dashLine),
                                 )
                               : null,
                         ),
@@ -714,16 +714,16 @@ class _RecurringScreenState extends State<RecurringScreen> {
                                     entry.value[i].name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: AppColors.ink,
+                                    style: TextStyle(
+                                      color: context.dashInk,
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   Text(
                                     '${entry.value[i].cadence} · ${entry.value[i].account}',
-                                    style: const TextStyle(
-                                      color: AppColors.softMute,
+                                    style: TextStyle(
+                                      color: context.dashSoftMute,
                                       fontSize: 12,
                                     ),
                                   ),
@@ -741,7 +741,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
                               primaryStyle: TextStyle(
                                 color: entry.value[i].amount > 0
                                     ? AppColors.success
-                                    : AppColors.ink,
+                                    : context.dashInk,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -767,53 +767,55 @@ class _RecurringScreenState extends State<RecurringScreen> {
     );
   }
 
+  Map<String, List<DemoRecurring>> get _typeGroups {
+    final map = <String, List<DemoRecurring>>{};
+    for (final r in _upcoming) {
+      final key = moneyMoveLabel(r.type);
+      map.putIfAbsent(key, () => []).add(r);
+    }
+    return map;
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _filtered;
-    final upcoming = _upcoming;
+    final groups = _typeGroups;
     final outflow = filtered
         .where((r) => r.amount < 0)
-        .fold<double>(0, (s, r) => s + r.amount);
+        .fold<double>(0, (s, r) => s + r.amount.abs());
     final inflow = filtered
         .where((r) => r.amount > 0)
         .fold<double>(0, (s, r) => s + r.amount);
+    final canWrite =
+        SpacesScope.maybeOf(context)?.can('recurring', 'write') != false;
+    final subtitle = filtered.length == _recurring.length
+        ? '${filtered.length} items'
+        : '${filtered.length} of ${_recurring.length} items';
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        foregroundColor: AppColors.ink,
-        elevation: 0,
-        title: const Text(
-          'Recurring',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+    return DashModalScaffold(
       body: ListView(
         padding: const EdgeInsets.only(bottom: 28),
         children: [
-          DashPageHeader(
+          DashFeedChrome(
             title: 'Recurring',
-            subtitle: 'Subscriptions, bills, and expected income',
-            actions: [
-              GhostButton(label: 'Detect more', onPressed: _detectMore),
-              AccentButton(
-                label: 'Add recurring',
-                onPressed: SpacesScope.maybeOf(context)
-                            ?.can('recurring', 'write') ==
-                        false
-                    ? null
-                    : _openAddRecurringSheet,
+            subtitle: subtitle,
+            onSecondary: _detectMore,
+            secondaryIcon: Icons.auto_awesome_outlined,
+            secondaryTooltip: 'Detect more',
+            extraActions: [
+              IconButton(
+                onPressed: _openCalendarSheet,
+                tooltip: 'Calendar',
+                icon: const Icon(Icons.calendar_month_outlined, size: 22),
+                color: context.dashInk,
+                visualDensity: VisualDensity.compact,
               ),
             ],
-          ),
-          if (_ctrl.loading)
-            const DashLoadingBody(kpiCount: 3, listRows: 5)
-          else ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: FilterSortBar(
+            onPrimary: _openAddRecurringSheet,
+            primaryTooltip: 'Add recurring',
+            primaryEnabled: canWrite,
+            metaLine: 'Out ${money(outflow)} · In ${money(inflow)}',
+            filterBar: FilterSortBar(
               fields: _filterFields,
               rules: _filterRules,
               sorts: _sortRules,
@@ -825,128 +827,61 @@ class _RecurringScreenState extends State<RecurringScreen> {
               searchHint: 'Search recurring…',
               onRulesChanged: (rules) => setState(() => _filterRules = rules),
               onSortsChanged: (sorts) => setState(() => _sortRules = sorts),
-              showStats: _showStats,
-              onShowStatsChanged: (v) => setState(() => _showStats = v),
+              iconButtons: true,
+              expandSearch: true,
             ),
           ),
-          if (_showStats) ...[
+          if (_ctrl.loading)
+            const DashLoadingBody(kpiCount: 1, listRows: 5)
+          else
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: DashKpi(
-                      label: 'Active series',
-                      value: '${filtered.length}',
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: DashKpi(
-                      label: 'Monthly out',
-                      value: money(outflow),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: DashKpi(
-                label: 'Monthly in',
-                value: money(inflow),
-                valueColor: AppColors.success,
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: DashPanel(
-              child: Column(
-                children: [
-                  DashPanelHeader(
-                    title: 'Upcoming transactions',
-                    subtitle: 'Next charge or deposit for each series',
-                    action: LinkAction(
-                      label: 'Calendar',
-                      onTap: _openCalendarSheet,
-                    ),
-                  ),
-                  if (upcoming.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 24, 16, 28),
-                      child: Text(
-                        'No upcoming transactions match these filters',
-                        style: TextStyle(
-                          color: AppColors.mute,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    )
-                  else
-                    for (var i = 0; i < upcoming.length; i++)
-                      _UpcomingTile(
-                        item: upcoming[i],
-                        showDivider: i < upcoming.length - 1,
-                        onTap: () => _openManageSheet(upcoming[i]),
-                      ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: DashPanel(
-              child: Column(
-                children: [
-                  DashPanelHeader(
-                    title: 'Recurring series',
-                    subtitle:
-                        '${filtered.length} of ${_recurring.length} shown · start & end dates',
-                  ),
-                  if (filtered.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 24, 16, 28),
+              child: filtered.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 24, 0, 28),
                       child: Text(
                         'No recurring series match these filters',
                         style: TextStyle(
-                          color: AppColors.mute,
+                          color: context.dashMute,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                     )
-                  else
-                    for (var i = 0; i < filtered.length; i++)
-                      _SeriesTile(
-                        item: filtered[i],
-                        showDivider: i < filtered.length - 1,
-                        onTap: () => _openManageSheet(filtered[i]),
-                      ),
-                ],
-              ),
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final entry in groups.entries) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(0, 14, 0, 6),
+                            child: Text(
+                              entry.key,
+                              style: TextStyle(
+                                color: context.dashMute,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          for (final item in entry.value)
+                            _RecurringRow(
+                              item: item,
+                              onTap: () => _openManageSheet(item),
+                            ),
+                        ],
+                      ],
+                    ),
             ),
-          ),
-          ],
         ],
       ),
     );
   }
 }
 
-class _UpcomingTile extends StatelessWidget {
-  const _UpcomingTile({
-    required this.item,
-    required this.showDivider,
-    required this.onTap,
-  });
+class _RecurringRow extends StatelessWidget {
+  const _RecurringRow({required this.item, required this.onTap});
 
   final DemoRecurring item;
-  final bool showDivider;
   final VoidCallback onTap;
 
   @override
@@ -956,11 +891,9 @@ class _UpcomingTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            border: showDivider
-                ? const Border(bottom: BorderSide(color: AppColors.line))
-                : null,
+            border: Border(bottom: BorderSide(color: context.dashLine)),
           ),
           child: Row(
             children: [
@@ -970,134 +903,35 @@ class _UpcomingTile extends StatelessWidget {
                   children: [
                     Text(
                       item.name,
-                      style: const TextStyle(
-                        color: AppColors.ink,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: context.dashInk,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${item.cadence} · ${item.category}',
-                      style: const TextStyle(
-                        color: AppColors.mute,
+                      '${item.cadence} · ${item.category} · next ${item.next}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: context.dashMute,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        TypePill(type: item.type),
-                        Text(
-                          'Due ${item.next}',
-                          style: const TextStyle(
-                            color: AppColors.ink,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        StatusPill(status: item.status),
-                      ],
-                    ),
                   ],
                 ),
               ),
+              const SizedBox(width: 12),
               ConvertedAmountText(
                 amount: (item.originalAmount ?? item.amount).abs(),
                 originalCurrency: item.originalCurrency ?? 'USD',
                 signed: true,
                 isIncome: item.amount > 0,
                 primaryStyle: TextStyle(
-                  color: item.amount > 0 ? AppColors.success : AppColors.ink,
-                  fontWeight: FontWeight.w800,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SeriesTile extends StatelessWidget {
-  const _SeriesTile({
-    required this.item,
-    required this.showDivider,
-    required this.onTap,
-  });
-
-  final DemoRecurring item;
-  final bool showDivider;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          decoration: BoxDecoration(
-            border: showDivider
-                ? const Border(bottom: BorderSide(color: AppColors.line))
-                : null,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.name,
-                      style: const TextStyle(
-                        color: AppColors.ink,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${item.category} · ${item.cadence}',
-                      style: const TextStyle(
-                        color: AppColors.mute,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${item.start} → ${item.endLabel} · next ${item.next}',
-                      style: const TextStyle(
-                        color: AppColors.softMute,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        TypePill(type: item.type),
-                        StatusPill(status: item.status),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              ConvertedAmountText(
-                amount: (item.originalAmount ?? item.amount).abs(),
-                originalCurrency: item.originalCurrency ?? 'USD',
-                signed: true,
-                isIncome: item.amount > 0,
-                primaryStyle: TextStyle(
-                  color: item.amount > 0 ? AppColors.success : AppColors.ink,
+                  color: item.amount > 0 ? AppColors.success : context.dashInk,
                   fontWeight: FontWeight.w800,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),

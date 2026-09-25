@@ -3,8 +3,25 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'dash_colors.dart';
 import 'data.dart';
 import 'variant_style.dart';
+
+/// Shared pull-to-refresh chrome for dashboard lists.
+Widget dashPullToRefresh({
+  required Future<void> Function() onRefresh,
+  required Widget child,
+  Color? color,
+  Color? backgroundColor,
+}) {
+  return RefreshIndicator(
+    color: color ?? AppColors.brand,
+    backgroundColor: backgroundColor,
+    displacement: 48,
+    onRefresh: onRefresh,
+    child: child,
+  );
+}
 
 class DashPageHeader extends StatelessWidget {
   const DashPageHeader({
@@ -22,11 +39,31 @@ class DashPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final header =
+        DashStyleScope.maybeOf(context)?.headerStyle ?? DashHeaderStyle.classic;
+    final showEyebrow = header == DashHeaderStyle.terminal;
+    final showMark = header != DashHeaderStyle.minimal;
+    final titleSize = header == DashHeaderStyle.minimal
+        ? (MediaQuery.sizeOf(context).width < 380 ? 20.0 : 22.0)
+        : (MediaQuery.sizeOf(context).width < 380 ? 22.0 : 26.0);
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+      padding: EdgeInsets.fromLTRB(20, header == DashHeaderStyle.minimal ? 14 : 18, 20, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (showEyebrow) ...[
+            Text(
+              'FinanceAI · ${title.toLowerCase()}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.4,
+                color: context.dashInk.withValues(alpha: 0.45),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -34,11 +71,11 @@ class DashPageHeader extends StatelessWidget {
                 child: Text(
                   title,
                   style: TextStyle(
-                    color: AppColors.ink,
-                    fontSize: MediaQuery.sizeOf(context).width < 380 ? 24 : 28,
+                    color: context.dashInk,
+                    fontSize: titleSize,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: -0.6,
-                    height: 1.1,
+                    letterSpacing: -0.8,
+                    height: 1.15,
                   ),
                 ),
               ),
@@ -52,18 +89,306 @@ class DashPageHeader extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               subtitle!,
-              style: const TextStyle(
-                color: AppColors.mute,
-                fontSize: 14,
+              style: TextStyle(
+                color: context.dashMute,
+                fontSize: 13,
                 fontWeight: FontWeight.w500,
+                height: 1.35,
+              ),
+            ),
+          ],
+          if (showMark) ...[
+            const SizedBox(height: 10),
+            Container(
+              height: 3,
+              width: 40,
+              decoration: BoxDecoration(
+                color: AppColors.brand,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
           ],
           if (actions != null && actions!.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Wrap(spacing: 8, runSpacing: 8, children: actions!),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Shared feed chrome matching Activity: title + subtitle + icon actions,
+/// full-width filter bar, optional mute meta strip.
+class DashFeedChrome extends StatelessWidget {
+  const DashFeedChrome({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    this.filterBar,
+    this.metaLine,
+    this.onSecondary,
+    this.secondaryIcon = Icons.download_outlined,
+    this.secondaryTooltip = 'Export',
+    this.onPrimary,
+    this.primaryIcon = Icons.add_circle_outline,
+    this.primaryTooltip = 'Add',
+    this.primaryEnabled = true,
+    this.showPrimary = true,
+    this.extraActions,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget? filterBar;
+  final String? metaLine;
+  final VoidCallback? onSecondary;
+  final IconData secondaryIcon;
+  final String secondaryTooltip;
+  final VoidCallback? onPrimary;
+  final IconData primaryIcon;
+  final String primaryTooltip;
+  final bool primaryEnabled;
+  final bool showPrimary;
+  final List<Widget>? extraActions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(20, 10, showPrimary || onSecondary != null || (extraActions?.isNotEmpty ?? false) ? 8 : 20, 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: context.dashInk,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.6,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: context.dashMute,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (onSecondary != null)
+                IconButton(
+                  onPressed: onSecondary,
+                  tooltip: secondaryTooltip,
+                  icon: Icon(secondaryIcon, size: 22),
+                  color: context.dashInk,
+                  visualDensity: VisualDensity.compact,
+                ),
+              if (extraActions != null) ...extraActions!,
+              if (showPrimary)
+                IconButton(
+                  onPressed: primaryEnabled ? onPrimary : null,
+                  tooltip: primaryTooltip,
+                  icon: Icon(primaryIcon, size: 26),
+                  color: AppColors.brand,
+                ),
+            ],
+          ),
+        ),
+        if (filterBar != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+            child: filterBar,
+          ),
+        if (metaLine != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Text(
+              metaLine!,
+              style: TextStyle(
+                color: context.dashSoftMute,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Full-height sheet that slides up from the bottom with rounded top corners
+/// (same language as [showDashSheet]: grab handle to dismiss).
+Route<T> dashModalRoute<T>({required WidgetBuilder builder}) {
+  return PageRouteBuilder<T>(
+    opaque: false,
+    barrierDismissible: true,
+    barrierColor: Colors.black.withValues(alpha: 0.45),
+    pageBuilder: (context, animation, secondaryAnimation) => builder(context),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 1),
+          end: Offset.zero,
+        ).animate(curved),
+        child: child,
+      );
+    },
+    transitionDuration: const Duration(milliseconds: 380),
+    reverseTransitionDuration: const Duration(milliseconds: 280),
+  );
+}
+
+/// Scaffold chrome for [dashModalRoute]: soft curved top + grab handle.
+/// Drag the handle, or pull down once the body is scrolled to the top, to close.
+class DashModalScaffold extends StatefulWidget {
+  const DashModalScaffold({
+    super.key,
+    required this.body,
+    this.backgroundColor,
+  });
+
+  final Widget body;
+  final Color? backgroundColor;
+
+  @override
+  State<DashModalScaffold> createState() => _DashModalScaffoldState();
+}
+
+class _DashModalScaffoldState extends State<DashModalScaffold>
+    with SingleTickerProviderStateMixin {
+  static const _radius = 28.0;
+  static const _dismissDistance = 110.0;
+
+  double _dragOffset = 0;
+  late final AnimationController _snapBack = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+  );
+  Animation<double>? _snapAnim;
+
+  @override
+  void dispose() {
+    _snapBack.dispose();
+    super.dispose();
+  }
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    _snapBack.stop();
+    final next = _dragOffset + details.delta.dy;
+    setState(() => _dragOffset = next < 0 ? 0 : next);
+  }
+
+  /// Pull-down at the top of the body list drags the sheet (Facebook-style).
+  bool _onBodyScroll(ScrollNotification n) {
+    if (n.depth != 0 || n.metrics.axis != Axis.vertical) return false;
+    if (n is OverscrollNotification &&
+        n.dragDetails != null &&
+        n.overscroll < 0) {
+      _snapBack.stop();
+      setState(() => _dragOffset -= n.overscroll);
+    } else if (n is ScrollUpdateNotification &&
+        n.dragDetails != null &&
+        _dragOffset > 0 &&
+        (n.scrollDelta ?? 0) > 0) {
+      final next = _dragOffset - n.scrollDelta!;
+      setState(() => _dragOffset = next < 0 ? 0 : next);
+    } else if (n is ScrollEndNotification && _dragOffset > 0) {
+      _onDragEnd(n.dragDetails ?? DragEndDetails());
+    }
+    return false;
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (_dragOffset > _dismissDistance ||
+        (velocity > 900 && _dragOffset > 0)) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    if (_dragOffset == 0) return;
+    final from = _dragOffset;
+    _snapAnim = Tween<double>(begin: from, end: 0).animate(
+      CurvedAnimation(parent: _snapBack, curve: Curves.easeOutCubic),
+    )..addListener(() {
+        setState(() => _dragOffset = _snapAnim!.value);
+      });
+    _snapBack
+      ..reset()
+      ..forward();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final topGap = MediaQuery.paddingOf(context).top + 10;
+    return Transform.translate(
+      offset: Offset(0, _dragOffset),
+      child: Padding(
+        padding: EdgeInsets.only(top: topGap),
+        child: Material(
+          color: widget.backgroundColor ?? context.dashSurface,
+          elevation: 12,
+          shadowColor: Colors.black38,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(_radius),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onVerticalDragUpdate: _onDragUpdate,
+                onVerticalDragEnd: _onDragEnd,
+                onTap: () => Navigator.of(context).maybePop(),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 12, 0, 14),
+                  child: Center(
+                    child: Container(
+                      width: 42,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: context.dashMute.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: SafeArea(
+                  top: false,
+                  // Clamping so top overscroll emits notifications on iOS too.
+                  child: ScrollConfiguration(
+                    behavior: ScrollConfiguration.of(context).copyWith(
+                      physics: const ClampingScrollPhysics(),
+                    ),
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: _onBodyScroll,
+                      child: widget.body,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -84,23 +409,16 @@ class DashPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = DashStyleScope.maybeOf(context);
-    final radius = style?.radius ?? 12;
+    final radius = style?.radius ?? 8;
 
     return Container(
       margin: margin,
       padding: padding,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.dashPanel,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: AppColors.line),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A32325D),
-            blurRadius: 2,
-            offset: Offset(0, 1),
-          ),
-        ],
+        border: Border.all(color: context.dashLine),
       ),
       child: child,
     );
@@ -123,8 +441,8 @@ class DashPanelHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.line)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: context.dashLine)),
       ),
       child: Row(
         children: [
@@ -134,8 +452,8 @@ class DashPanelHeader extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: AppColors.ink,
+                  style: TextStyle(
+                    color: context.dashInk,
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                   ),
@@ -144,8 +462,8 @@ class DashPanelHeader extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     subtitle!,
-                    style: const TextStyle(
-                      color: AppColors.mute,
+                    style: TextStyle(
+                      color: context.dashMute,
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
@@ -184,7 +502,7 @@ class DashKpi extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lineColor =
-        sparkColor ?? (sparkUp ? AppColors.accent : AppColors.softMute);
+        sparkColor ?? (sparkUp ? AppColors.accent : context.dashSoftMute);
     return DashPanel(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       child: Column(
@@ -193,8 +511,8 @@ class DashKpi extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(
-              color: AppColors.mute,
+            style: TextStyle(
+              color: context.dashMute,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
@@ -203,7 +521,7 @@ class DashKpi extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-              color: valueColor ?? AppColors.ink,
+              color: valueColor ?? context.dashInk,
               fontSize: 22,
               fontWeight: FontWeight.w700,
               letterSpacing: -0.5,
@@ -220,7 +538,7 @@ class DashKpi extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: sparkUp ? AppColors.success : AppColors.mute,
+                        color: sparkUp ? AppColors.success : context.dashMute,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -235,7 +553,7 @@ class DashKpi extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: sparkUp ? AppColors.success : AppColors.mute,
+                  color: sparkUp ? AppColors.success : context.dashMute,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -274,17 +592,18 @@ class GhostButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = DashStyleScope.maybeOf(context);
     final radius = style?.radius ?? 8;
-    final fg = foregroundColor ?? AppColors.ink;
+    final fg = foregroundColor ?? context.dashInk;
+    final activeBorder = context.isDark
+        ? AppColors.brand.withValues(alpha: 0.45)
+        : const Color(0xFFCFE4F6);
     return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
         foregroundColor: fg,
-        backgroundColor: Colors.white,
-        disabledForegroundColor: AppColors.softMute,
+        backgroundColor: context.dashPanel,
+        disabledForegroundColor: context.dashSoftMute,
         side: BorderSide(
-          color: foregroundColor != null
-              ? const Color(0xFFCFE4F6)
-              : AppColors.line,
+          color: foregroundColor != null ? activeBorder : context.dashLine,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         minimumSize: Size.zero,
@@ -363,17 +682,17 @@ class StatusPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final (bg, fg, label) = switch (status) {
       TxnStatus.succeeded => (
-          const Color(0xFFE6F9F1),
+          context.dashSuccessFill,
           AppColors.success,
           'Succeeded',
         ),
       TxnStatus.pending => (
-          const Color(0xFFFFF8E6),
+          context.dashWarningFill,
           AppColors.warning,
           'Pending',
         ),
       TxnStatus.failed => (
-          const Color(0xFFFDE8E8),
+          context.dashDangerFill,
           AppColors.danger,
           'Failed',
         ),
@@ -431,8 +750,8 @@ class _AccountNumberState extends State<AccountNumber> {
     if (digits.isEmpty) return const SizedBox.shrink();
 
     final style = widget.style ??
-        const TextStyle(
-          color: AppColors.softMute,
+        TextStyle(
+          color: context.dashSoftMute,
           fontSize: 12,
           letterSpacing: 1.2,
         );
@@ -463,7 +782,7 @@ class _AccountNumberState extends State<AccountNumber> {
                     ? Icons.visibility_off_outlined
                     : Icons.visibility_outlined,
                 size: 14,
-                color: AppColors.softMute,
+                color: context.dashSoftMute,
               ),
             ),
           ),
@@ -482,21 +801,21 @@ class ApprovalPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final (bg, fg, border, label) = switch (status) {
       ApprovalStatus.approved => (
-          const Color(0xFFE6F9F1),
+          context.dashSuccessFill,
           AppColors.success,
-          const Color(0xFFA7F3D0),
+          AppColors.success.withValues(alpha: context.isDark ? 0.35 : 0.45),
           'Approved',
         ),
       ApprovalStatus.rejected => (
-          const Color(0xFFFDE8E8),
+          context.dashDangerFill,
           AppColors.danger,
-          const Color(0xFFFECACA),
+          AppColors.danger.withValues(alpha: context.isDark ? 0.35 : 0.45),
           'Rejected',
         ),
       ApprovalStatus.pending => (
-          const Color(0xFFFFF8E6),
+          context.dashWarningFill,
           AppColors.warning,
-          const Color(0xFFFDE68A),
+          AppColors.warning.withValues(alpha: context.isDark ? 0.35 : 0.45),
           'Pending',
         ),
     };
@@ -589,13 +908,17 @@ class ApprovalActions extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFF8E6),
+          color: context.dashWarningFill,
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: const Color(0xFFFDE68A)),
+          border: Border.all(
+            color: AppColors.warning.withValues(
+              alpha: context.isDark ? 0.35 : 0.45,
+            ),
+          ),
         ),
-        child: Row(
+        child: const Row(
           mainAxisSize: MainAxisSize.min,
-          children: const [
+          children: [
             Text(
               'Pending',
               style: TextStyle(
@@ -621,9 +944,9 @@ class TypePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (bg, fg) = switch (type) {
-      MoneyMove.income => (const Color(0xFFE6F9F1), AppColors.success),
-      MoneyMove.transfer => (const Color(0xFFEEF4FF), AppColors.brand),
-      MoneyMove.expense => (const Color(0xFFF6F9FC), AppColors.mute),
+      MoneyMove.income => (context.dashSuccessFill, AppColors.success),
+      MoneyMove.transfer => (context.dashBrandFill, AppColors.brand),
+      MoneyMove.expense => (context.dashSurface, context.dashMute),
     };
 
     return Container(
@@ -664,7 +987,7 @@ class ProgressTrack extends StatelessWidget {
         height: height,
         child: LinearProgressIndicator(
           value: progress.clamp(0.0, 1.0),
-          backgroundColor: AppColors.surface,
+          backgroundColor: context.dashSurface,
           color: color,
           minHeight: height,
         ),
@@ -752,7 +1075,10 @@ class AreaSpendChart extends StatelessWidget {
     return SizedBox(
       height: 180,
       child: CustomPaint(
-        painter: _AreaPainter(),
+        painter: _AreaPainter(
+          lineColor: context.dashLine,
+          labelColor: context.dashSoftMute,
+        ),
         child: const SizedBox.expand(),
       ),
     );
@@ -760,6 +1086,11 @@ class AreaSpendChart extends StatelessWidget {
 }
 
 class _AreaPainter extends CustomPainter {
+  _AreaPainter({required this.lineColor, required this.labelColor});
+
+  final Color lineColor;
+  final Color labelColor;
+
   @override
   void paint(Canvas canvas, Size size) {
     final series = spendSeries;
@@ -772,7 +1103,7 @@ class _AreaPainter extends CustomPainter {
     final innerH = size.height - padT - padB;
 
     final grid = Paint()
-      ..color = AppColors.line
+      ..color = lineColor
       ..strokeWidth = 1;
     for (final t in [0.25, 0.5, 0.75, 1.0]) {
       final y = padT + innerH * (1 - t);
@@ -827,8 +1158,8 @@ class _AreaPainter extends CustomPainter {
       final x = padL + (i / (series.length - 1)) * innerW;
       tp.text = TextSpan(
         text: spendMonths[i],
-        style: const TextStyle(
-          color: AppColors.softMute,
+        style: TextStyle(
+          color: labelColor,
           fontSize: 10,
           fontWeight: FontWeight.w500,
         ),
@@ -839,7 +1170,8 @@ class _AreaPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _AreaPainter oldDelegate) =>
+      oldDelegate.lineColor != lineColor || oldDelegate.labelColor != labelColor;
 }
 
 class IncomeSpendBars extends StatelessWidget {
@@ -859,10 +1191,25 @@ class IncomeSpendBars extends StatelessWidget {
     final m = months ?? reportMonths;
     final inc = income ?? reportIncome;
     final sp = spend ?? reportSpend;
-    final max = math.max(
-      inc.reduce(math.max),
-      sp.reduce(math.max),
+    if (m.isEmpty) {
+      return SizedBox(
+        height: 120,
+        child: Center(
+          child: Text(
+            'No cashflow data yet',
+            style: TextStyle(
+              color: context.dashMute,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      );
+    }
+    final rawMax = math.max(
+      inc.isEmpty ? 0.0 : inc.reduce(math.max),
+      sp.isEmpty ? 0.0 : sp.reduce(math.max),
     );
+    final max = rawMax <= 0 ? 1.0 : rawMax;
     return SizedBox(
       height: 200,
       child: Row(
@@ -881,7 +1228,7 @@ class IncomeSpendBars extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Container(
-                              height: (inc[i] / max) * 160,
+                              height: ((i < inc.length ? inc[i] : 0) / max) * 160,
                               decoration: BoxDecoration(
                                 color: const Color(0xFFC7C3FF),
                                 borderRadius: BorderRadius.circular(4),
@@ -891,7 +1238,7 @@ class IncomeSpendBars extends StatelessWidget {
                           const SizedBox(width: 3),
                           Expanded(
                             child: Container(
-                              height: (sp[i] / max) * 160,
+                              height: ((i < sp.length ? sp[i] : 0) / max) * 160,
                               decoration: BoxDecoration(
                                 color: AppColors.accent,
                                 borderRadius: BorderRadius.circular(4),
@@ -904,8 +1251,8 @@ class IncomeSpendBars extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text(
                       m[i],
-                      style: const TextStyle(
-                        color: AppColors.softMute,
+                      style: TextStyle(
+                        color: context.dashSoftMute,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),

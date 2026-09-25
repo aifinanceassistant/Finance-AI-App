@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../onboarding_layout.dart';
 import '../onboarding_shell.dart';
 
 class MovesStep extends StatefulWidget {
@@ -35,73 +36,41 @@ class _MovesStepState extends State<MovesStep>
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+    return OnboardingStepScaffold(
+      title: 'Money moves',
+      subtitle:
+          'FinanceAI sorts activity into spending, transfers, and earnings so budgets stay clear.',
+      body: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
             children: [
-              const Text(
-                'Money moves',
-                style: TextStyle(
-                  color: AppColors.ink,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.6,
-                  height: 1.15,
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'FinanceAI sorts activity into spending, transfers, and earnings so budgets stay clear.',
-                style: TextStyle(
-                  color: AppColors.mute,
-                  fontSize: 15,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 18),
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF0F3F7),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: TabBar(
-                  controller: _tabs,
-                  labelColor: AppColors.ink,
-                  unselectedLabelColor: AppColors.mute,
-                  indicator: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
+              for (var i = 0; i < 3; i++)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(
+                      const ['Spending', 'Transfers', 'Earnings'][i],
+                    ),
+                    selected: _tabs.index == i,
+                    onSelected: (_) => setState(() => _tabs.index = i),
                   ),
-                  indicatorSize: TabBarIndicatorSize.tab,
-                  dividerColor: Colors.transparent,
-                  labelStyle: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  tabs: const [
-                    Tab(text: 'Spending'),
-                    Tab(text: 'Transfers'),
-                    Tab(text: 'Earnings'),
-                  ],
                 ),
-              ),
-              const SizedBox(height: 16),
-              ListenableBuilder(
-                listenable: _tabs,
-                builder: (context, _) => _MovePanel(index: _tabs.index),
-              ),
             ],
           ),
         ),
-        OnboardingActions(
-          primaryLabel: 'Continue',
-          onPrimary: widget.onContinue,
-          secondaryLabel: 'Skip for now',
-          onSecondary: widget.onSkip,
+        const SizedBox(height: 16),
+        ListenableBuilder(
+          listenable: _tabs,
+          builder: (context, _) => _MovePanel(index: _tabs.index),
         ),
       ],
+      actions: OnboardingActions(
+        primaryLabel: 'Continue',
+        onPrimary: widget.onContinue,
+        secondaryLabel: 'Skip for now',
+        onSecondary: widget.onSkip,
+      ),
     );
   }
 }

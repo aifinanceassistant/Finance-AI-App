@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
+import 'dash_colors.dart';
 import 'ui.dart';
 
 enum FilterFieldType { text, number, select, date }
@@ -190,6 +191,8 @@ class FilterSortBar extends StatelessWidget {
     this.searchHint = 'Search…',
     this.showStats,
     this.onShowStatsChanged,
+    this.iconButtons = false,
+    this.expandSearch = false,
   });
 
   final List<FilterFieldDef> fields;
@@ -205,11 +208,74 @@ class FilterSortBar extends StatelessWidget {
   final String searchHint;
   final bool? showStats;
   final ValueChanged<bool>? onShowStatsChanged;
+  /// Web-style filter/sort icons with count badges (instead of GhostButtons).
+  final bool iconButtons;
+  /// Stretch the search field across remaining width (Row + Expanded).
+  final bool expandSearch;
 
   @override
   Widget build(BuildContext context) {
     final statsVisible = showStats;
     final onStats = onShowStatsChanged;
+    final actions = <Widget>[
+      if (iconButtons) ...[
+        _FilterSortIconButton(
+          tooltip: rules.isEmpty ? 'Filter' : 'Filter · ${rules.length}',
+          icon: Icons.filter_list_rounded,
+          active: rules.isNotEmpty,
+          badge: rules.isEmpty ? null : rules.length,
+          onPressed: () => _openFilters(context),
+        ),
+        _FilterSortIconButton(
+          tooltip: sorts.isEmpty ? 'Sort' : 'Sort · ${sorts.length}',
+          icon: Icons.swap_vert_rounded,
+          active: sorts.isNotEmpty,
+          badge: sorts.isEmpty ? null : sorts.length,
+          onPressed: () => _openSorts(context),
+        ),
+      ] else ...[
+        GhostButton(
+          label: rules.isEmpty ? 'Filter' : 'Filter · ${rules.length}',
+          onPressed: () => _openFilters(context),
+          foregroundColor: rules.isNotEmpty ? AppColors.brandDark : null,
+        ),
+        GhostButton(
+          label: sorts.isEmpty ? 'Sort' : 'Sort · ${sorts.length}',
+          onPressed: () => _openSorts(context),
+          foregroundColor: sorts.isNotEmpty ? AppColors.brandDark : null,
+        ),
+      ],
+      if (statsVisible != null && onStats != null)
+        IconButton(
+          onPressed: () => onStats(!statsVisible),
+          tooltip: statsVisible ? 'Hide stats' : 'Show stats',
+          icon: Icon(
+            Icons.speed_outlined,
+            size: 18,
+            color: statsVisible ? AppColors.brandDark : context.dashMute,
+          ),
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+        ),
+    ];
+
+    if (expandSearch && onSearchChanged != null) {
+      return Row(
+        children: [
+          Expanded(
+            child: _TableSearchField(
+              value: search,
+              hint: searchHint,
+              onChanged: onSearchChanged!,
+            ),
+          ),
+          const SizedBox(width: 4),
+          ...actions,
+        ],
+      );
+    }
+
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -224,31 +290,7 @@ class FilterSortBar extends StatelessWidget {
               onChanged: onSearchChanged!,
             ),
           ),
-        GhostButton(
-          label: rules.isEmpty ? 'Filter' : 'Filter · ${rules.length}',
-          onPressed: () => _openFilters(context),
-          foregroundColor: rules.isNotEmpty ? AppColors.brandDark : null,
-        ),
-        GhostButton(
-          label: sorts.isEmpty ? 'Sort' : 'Sort · ${sorts.length}',
-          onPressed: () => _openSorts(context),
-          foregroundColor: sorts.isNotEmpty ? AppColors.brandDark : null,
-        ),
-        if (statsVisible != null && onStats != null)
-          IconButton(
-            onPressed: () => onStats(!statsVisible),
-            tooltip: statsVisible ? 'Hide stats' : 'Show stats',
-            icon: Icon(
-              Icons.speed_outlined,
-              size: 18,
-              color: statsVisible
-                  ? AppColors.brandDark
-                  : AppColors.mute,
-            ),
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-          ),
+        ...actions,
       ],
     );
   }
@@ -269,7 +311,7 @@ class FilterSortBar extends StatelessWidget {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.dashPanel,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -288,11 +330,11 @@ class FilterSortBar extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          const Expanded(
+                          Expanded(
                             child: Text(
                               'Filters',
                               style: TextStyle(
-                                color: AppColors.ink,
+                                color: context.dashInk,
                                 fontSize: 17,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -384,7 +426,7 @@ class FilterSortBar extends StatelessWidget {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.dashPanel,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -400,11 +442,11 @@ class FilterSortBar extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: Text(
                             'Sort',
                             style: TextStyle(
-                              color: AppColors.ink,
+                              color: context.dashInk,
                               fontSize: 17,
                               fontWeight: FontWeight.w800,
                             ),
@@ -433,8 +475,8 @@ class FilterSortBar extends StatelessWidget {
                               width: 44,
                               child: Text(
                                 i == 0 ? 'By' : 'Then',
-                                style: const TextStyle(
-                                  color: AppColors.mute,
+                                style: TextStyle(
+                                  color: context.dashMute,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -518,6 +560,68 @@ class FilterSortBar extends StatelessWidget {
   }
 }
 
+class _FilterSortIconButton extends StatelessWidget {
+  const _FilterSortIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.active,
+    required this.onPressed,
+    this.badge,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onPressed;
+  final int? badge;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          IconButton(
+            onPressed: onPressed,
+            icon: Icon(
+              icon,
+              size: 18,
+              color: active ? AppColors.brandDark : context.dashMute,
+            ),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+          ),
+          if (badge != null && badge! > 0)
+            Positioned(
+              right: 2,
+              top: 2,
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.brand,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '$badge',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _TableSearchField extends StatefulWidget {
   const _TableSearchField({
     required this.value,
@@ -568,8 +672,8 @@ class _TableSearchFieldState extends State<_TableSearchField> {
         setState(() {});
         widget.onChanged(v);
       },
-      style: const TextStyle(
-        color: AppColors.ink,
+      style: TextStyle(
+        color: context.dashInk,
         fontSize: 13,
         fontWeight: FontWeight.w600,
       ),
@@ -587,12 +691,16 @@ class _TableSearchFieldState extends State<_TableSearchField> {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.line),
+          borderSide: BorderSide(color: context.dashLine),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
-            color: active ? const Color(0xFFCFE4F6) : AppColors.line,
+            color: active
+                ? (context.isDark
+                    ? AppColors.brand.withValues(alpha: 0.45)
+                    : const Color(0xFFCFE4F6))
+                : context.dashLine,
           ),
         ),
         focusedBorder: OutlineInputBorder(
@@ -600,7 +708,9 @@ class _TableSearchFieldState extends State<_TableSearchField> {
           borderSide: const BorderSide(color: Color(0xFF3B9AE0)),
         ),
         filled: true,
-        fillColor: active ? const Color(0xFFF5F9FD) : Colors.white,
+        fillColor: active
+            ? context.dashElevated
+            : context.dashPanel,
       ),
     );
   }
@@ -639,10 +749,10 @@ class _FilterRuleRow extends StatelessWidget {
               SizedBox(
                 width: 52,
                 child: index == 0
-                    ? const Text(
+                    ? Text(
                         'Where',
                         style: TextStyle(
-                          color: AppColors.mute,
+                          color: context.dashMute,
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),

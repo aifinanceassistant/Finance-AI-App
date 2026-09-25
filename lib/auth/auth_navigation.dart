@@ -9,8 +9,13 @@ import 'auth_scope.dart';
 
 Future<void> goAfterAuth(BuildContext context) async {
   final auth = AuthScope.read(context);
+  // Auth notifies multiple times (session, profile, FX). Navigate only once.
+  if (!auth.beginPostAuthNavigation()) return;
+
+  await auth.closeAuthBrowser();
+  if (!context.mounted) return;
+
   if (auth.needsPasswordReset) {
-    if (!context.mounted) return;
     await Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const ResetPasswordScreen()),
       (route) => false,
@@ -18,6 +23,7 @@ Future<void> goAfterAuth(BuildContext context) async {
     return;
   }
   await auth.syncProfile();
+  await auth.waitForProfile();
   if (!context.mounted) return;
   final dest = auth.destinationForSession();
   final Widget page = switch (dest) {

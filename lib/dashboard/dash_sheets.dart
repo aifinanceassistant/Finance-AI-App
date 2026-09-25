@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
+import 'dash_colors.dart';
 import 'ui.dart';
 
 Future<T?> showDashSheet<T>({
@@ -14,7 +15,7 @@ Future<T?> showDashSheet<T>({
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.white,
+    backgroundColor: context.dashPanel,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
     ),
@@ -40,7 +41,7 @@ Future<T?> showDashSheet<T>({
                         width: 36,
                         height: 4,
                         decoration: BoxDecoration(
-                          color: AppColors.line,
+                          color: ctx.dashLine,
                           borderRadius: BorderRadius.circular(999),
                         ),
                       ),
@@ -55,8 +56,8 @@ Future<T?> showDashSheet<T>({
                               children: [
                                 Text(
                                   title,
-                                  style: const TextStyle(
-                                    color: AppColors.ink,
+                                  style: TextStyle(
+                                    color: ctx.dashInk,
                                     fontSize: 18,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: -0.3,
@@ -66,8 +67,8 @@ Future<T?> showDashSheet<T>({
                                   const SizedBox(height: 4),
                                   Text(
                                     description,
-                                    style: const TextStyle(
-                                      color: AppColors.mute,
+                                    style: TextStyle(
+                                      color: ctx.dashMute,
                                       fontSize: 13,
                                       height: 1.35,
                                     ),
@@ -79,12 +80,12 @@ Future<T?> showDashSheet<T>({
                           IconButton(
                             onPressed: () => Navigator.pop(ctx),
                             icon: const Icon(Icons.close_rounded),
-                            color: AppColors.mute,
+                            color: ctx.dashMute,
                           ),
                         ],
                       ),
                     ),
-                    const Divider(height: 1, color: AppColors.line),
+                    Divider(height: 1, color: ctx.dashLine),
                     Flexible(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
@@ -92,7 +93,7 @@ Future<T?> showDashSheet<T>({
                       ),
                     ),
                     if (actions != null && actions.isNotEmpty) ...[
-                      const Divider(height: 1, color: AppColors.line),
+                      Divider(height: 1, color: ctx.dashLine),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
                         child: Row(
@@ -127,8 +128,8 @@ class DashFieldLabel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(
         text,
-        style: const TextStyle(
-          color: AppColors.mute,
+        style: TextStyle(
+          color: context.dashMute,
           fontSize: 12,
           fontWeight: FontWeight.w700,
         ),
@@ -170,14 +171,14 @@ class DashTextField extends StatelessWidget {
       obscureText: obscureText,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
-      style: const TextStyle(
-        color: AppColors.ink,
+      style: TextStyle(
+        color: context.dashInk,
         fontSize: 14,
         fontWeight: FontWeight.w600,
       ),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: AppColors.softMute, fontSize: 14),
+        hintStyle: TextStyle(color: context.dashSoftMute, fontSize: 14),
         errorText: hasError ? errorText : null,
         errorStyle: const TextStyle(
           color: AppColors.danger,
@@ -185,19 +186,19 @@ class DashTextField extends StatelessWidget {
           fontWeight: FontWeight.w600,
         ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: context.dashPanel,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(
-            color: hasError ? AppColors.danger : AppColors.line,
+            color: hasError ? AppColors.danger : context.dashLine,
           ),
         ),
         enabledBorder: hasError
             ? errorBorder
             : OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.line),
+                borderSide: BorderSide(color: context.dashLine),
               ),
         focusedBorder: hasError
             ? errorBorder.copyWith(
@@ -225,33 +226,59 @@ class DashDropdown<T> extends StatelessWidget {
     required this.labelOf,
   });
 
-  final T value;
+  final T? value;
   final List<T> items;
   final ValueChanged<T> onChanged;
   final String Function(T) labelOf;
 
   @override
   Widget build(BuildContext context) {
+    final resolved = value != null && items.contains(value) ? value as T : null;
     return DropdownButtonFormField<T>(
-      value: value,
+      // ignore: deprecated_member_use
+      value: resolved,
+      isExpanded: true,
+      icon: Icon(Icons.expand_more_rounded, color: context.dashMute, size: 20),
+      dropdownColor: context.dashPanel,
+      style: TextStyle(
+        color: context.dashInk,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
       items: [
         for (final item in items)
-          DropdownMenuItem(value: item, child: Text(labelOf(item))),
+          DropdownMenuItem(
+            value: item,
+            child: Text(
+              labelOf(item),
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: context.dashInk,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
       ],
       onChanged: (v) {
         if (v != null) onChanged(v);
       },
       decoration: InputDecoration(
         filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        fillColor: context.dashElevated,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.line),
+          borderSide: BorderSide(color: context.dashLine),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.line),
+          borderSide: BorderSide(color: context.dashLine),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.brand),
         ),
       ),
     );

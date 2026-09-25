@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'dash_colors.dart';
 
 enum TxnStatus { succeeded, pending, failed }
 
@@ -452,6 +453,217 @@ const reportCategories = [
   DemoCategory(name: 'Transport', amount: 210, pct: 7, color: Color(0xFF00D4AA)),
   DemoCategory(name: 'Other', amount: 824, pct: 26, color: AppColors.softMute),
 ];
+
+const _reportCatColors = [
+  AppColors.accent,
+  AppColors.brand,
+  Color(0xFFFFC043),
+  Color(0xFF00D4AA),
+  Color(0xFFFF6B6B),
+  AppColors.softMute,
+];
+
+/// Report window: current month, trailing 3 months, year-to-date, trailing 12.
+enum ReportPeriod { month, m3, ytd, m12 }
+
+extension ReportPeriodX on ReportPeriod {
+  String get label => switch (this) {
+        ReportPeriod.month => 'This month',
+        ReportPeriod.m3 => '3 months',
+        ReportPeriod.ytd => 'YTD',
+        ReportPeriod.m12 => '12 months',
+      };
+
+  String get shortLabel => switch (this) {
+        ReportPeriod.month => '1M',
+        ReportPeriod.m3 => '3M',
+        ReportPeriod.ytd => 'YTD',
+        ReportPeriod.m12 => '12M',
+      };
+
+  /// Number of month buckets ending at the current month.
+  int monthCount([DateTime? now]) {
+    final n = now ?? DateTime.now();
+    return switch (this) {
+      ReportPeriod.month => 1,
+      ReportPeriod.m3 => 3,
+      ReportPeriod.ytd => n.month,
+      ReportPeriod.m12 => 12,
+    };
+  }
+}
+
+/// Parse YYYY-MM-DD (or leading 10 chars of an ISO string) to a local noon date.
+/// Also accepts display labels like `Mar 22` (assumes current year).
+DateTime? parseTxnDay(String? raw, {DateTime? now}) {
+  if (raw == null || raw.trim().isEmpty) return null;
+  final s = raw.trim();
+  if (s.length >= 10 && s[4] == '-' && s[7] == '-') {
+    final iso = s.substring(0, 10);
+    final parts = iso.split('-');
+    if (parts.length == 3) {
+      final y = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      final d = int.tryParse(parts[2]);
+      if (y != null && m != null && d != null) {
+        return DateTime(y, m, d, 12);
+      }
+    }
+  }
+  const months = {
+    'jan': 1,
+    'feb': 2,
+    'mar': 3,
+    'apr': 4,
+    'may': 5,
+    'jun': 6,
+    'jul': 7,
+    'aug': 8,
+    'sep': 9,
+    'oct': 10,
+    'nov': 11,
+    'dec': 12,
+  };
+  final match = RegExp(
+    r'^([A-Za-z]{3})\s+(\d{1,2})(?:,?\s*(\d{4}))?$',
+  ).firstMatch(s);
+  if (match != null) {
+    final m = months[match.group(1)!.toLowerCase()];
+    final d = int.tryParse(match.group(2)!);
+    final y = int.tryParse(match.group(3) ?? '') ?? (now ?? DateTime.now()).year;
+    if (m != null && d != null) return DateTime(y, m, d, 12);
+  }
+  return null;
+}
+
+DateTime? txnDay(DemoTxn t, {DateTime? now}) =>
+    parseTxnDay(t.dateIso, now: now) ?? parseTxnDay(t.date, now: now);
+
+class CashflowBucket {
+  CashflowBucket({required this.key, required this.label});
+
+  final String key;
+  final String label;
+  double inflow = 0;
+  double outflow = 0;
+  double get net => inflow - outflow;
+}
+
+String shortMonthLabel(DateTime d) {
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  return months[d.month - 1];
+}
+
+String monthYearLabel(DateTime d) => '${shortMonthLabel(d)} ${d.year}';
+
+/// Trailing [months] cashflow buckets ending at the current month.
+List<CashflowBucket> buildCashflowBuckets(
+  List<DemoTxn> txns, {
+  int months = 12,
+  DateTime? now,
+}) {
+  final count = months < 1 ? 1 : months;
+  final today = now ?? DateTime.now();
+  final end = DateTime(today.year, today.month, 1, 12);
+  final min = DateTime(end.year, end.month - (count - 1), 1, 12);
+
+  final buckets = <CashflowBucket>[
+    for (var i = 0; i < count; i++)
+      CashflowBucket(
+        key:
+            '${DateTime(min.year, min.month + i, 1).year.toString().padLeft(4, '0')}-'
+            '${DateTime(min.year, min.month + i, 1).month.toString().padLeft(2, '0')}',
+        label: shortMonthLabel(DateTime(min.year, min.month + i, 1, 12)),
+      ),
+  ];
+
+  for (final t in txns) {
+    final day = txnDay(t);
+    if (day == null) continue;
+    final i = (day.year - min.year) * 12 + (day.month - min.month);
+    if (i < 0 || i >= count) continue;
+    if (t.amount > 0) {
+      buckets[i].inflow += t.amount;
+    } else if (t.amount < 0) {
+      buckets[i].outflow += t.amount.abs();
+    }
+  }
+  return buckets;
+}
+
+List<DemoTxn> txnsInReportPeriod(
+  List<DemoTxn> txns,
+  ReportPeriod period, {
+  DateTime? now,
+}) {
+  final n = now ?? DateTime.now();
+  final count = period.monthCount(n);
+  final end = DateTime(n.year, n.month + 1, 0, 23, 59, 59);
+  final start = DateTime(n.year, n.month - (count - 1), 1);
+  return txns.where((t) {
+    final day = txnDay(t);
+    return day != null && !day.isBefore(start) && !day.isAfter(end);
+  }).toList();
+}
+
+List<DemoTxn> txnsInCurrentMonth(List<DemoTxn> txns, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  final y = n.year;
+  final m = n.month;
+  return txns.where((t) {
+    final day = txnDay(t);
+    return day != null && day.year == y && day.month == m;
+  }).toList();
+}
+
+/// Top spend categories from expense txns (amount &lt; 0), largest first.
+List<DemoCategory> categorySpendBreakdown(
+  List<DemoTxn> txns, {
+  int limit = 8,
+}) {
+  final totals = <String, double>{};
+  for (final t in txns) {
+    if (t.amount >= 0) continue;
+    final name = t.category.trim().isEmpty ? 'Other' : t.category.trim();
+    totals[name] = (totals[name] ?? 0) + t.amount.abs();
+  }
+  final sorted = totals.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  final slice = sorted.take(limit).toList();
+  final total = slice.fold<double>(0, (s, e) => s + e.value);
+  return [
+    for (var i = 0; i < slice.length; i++)
+      DemoCategory(
+        name: slice[i].key,
+        amount: slice[i].value,
+        pct: total <= 0 ? 0 : (slice[i].value / total) * 100,
+        color: _reportCatColors[i % _reportCatColors.length],
+      ),
+  ];
+}
+
+DemoGoal? pickPrimaryGoal(List<DemoGoal> goals) {
+  if (goals.isEmpty) return null;
+  DemoGoal best = goals.first;
+  double bestPct = best.target <= 0 ? 0 : best.saved / best.target;
+  for (var i = 1; i < goals.length; i++) {
+    final g = goals[i];
+    final pct = g.target <= 0 ? 0.0 : g.saved / g.target;
+    if (pct > bestPct) {
+      best = g;
+      bestPct = pct;
+    }
+  }
+  return best;
+}
+
+int daysLeftInMonth({DateTime? now}) {
+  final n = now ?? DateTime.now();
+  return DateTime(n.year, n.month + 1, 0).day - n.day;
+}
 
 final demoTransactions = [
   DemoTxn(
@@ -1236,44 +1448,62 @@ final demoTransactions = [
 
 const demoAccounts = [
   DemoAccount(
+    id: 'demo-n26',
     bank: 'N26',
     type: 'Checking',
     number: '····4821',
+    lastFour: '4821',
     balance: 4820.12,
     status: TxnStatus.succeeded,
     synced: '2 min ago',
+    provider: 'plaid',
+    connectionId: 'demo-conn-n26',
   ),
   DemoAccount(
+    id: 'demo-revolut',
     bank: 'Revolut',
     type: 'Everyday',
     number: '····1190',
+    lastFour: '1190',
     balance: 2140.5,
     status: TxnStatus.succeeded,
     synced: '5 min ago',
+    provider: 'plaid',
+    connectionId: 'demo-conn-revolut',
   ),
   DemoAccount(
+    id: 'demo-wise',
     bank: 'Wise',
     type: 'Multi-currency',
     number: '····7742',
+    lastFour: '7742',
     balance: 5519.6,
     status: TxnStatus.succeeded,
     synced: '12 min ago',
+    provider: 'plaid',
+    connectionId: 'demo-conn-wise',
   ),
   DemoAccount(
+    id: 'demo-monzo',
     bank: 'Monzo',
     type: 'Spending',
     number: '····9088',
+    lastFour: '9088',
     balance: 312.4,
     status: TxnStatus.pending,
     synced: 'Syncing…',
+    provider: 'manual',
   ),
   DemoAccount(
+    id: 'demo-klarna',
     bank: 'Klarna',
     type: 'Card',
     number: '····3301',
+    lastFour: '3301',
     balance: -89.99,
     status: TxnStatus.succeeded,
     synced: '1 hr ago',
+    provider: 'manual',
   ),
 ];
 
@@ -1283,6 +1513,7 @@ final ValueNotifier<List<DemoAccount>> accountsStore =
 
 const demoGoals = [
   DemoGoal(
+    id: 'goal_1',
     name: 'Emergency fund',
     target: 10000,
     saved: 6400,
@@ -1291,6 +1522,7 @@ const demoGoals = [
     note: '6 months of expenses',
   ),
   DemoGoal(
+    id: 'goal_2',
     name: 'Summer trip',
     target: 2400,
     saved: 1180,
@@ -1299,6 +1531,7 @@ const demoGoals = [
     note: 'Portugal · family of 4',
   ),
   DemoGoal(
+    id: 'goal_3',
     name: 'New laptop',
     target: 1800,
     saved: 920,
@@ -1307,6 +1540,7 @@ const demoGoals = [
     note: 'Work machine',
   ),
   DemoGoal(
+    id: 'goal_4',
     name: 'Baby fund',
     target: 5000,
     saved: 2750,
@@ -1318,6 +1552,7 @@ const demoGoals = [
 
 const demoHoldings = [
   DemoHolding(
+    id: 'hold_1',
     name: 'Vanguard FTSE All-World',
     ticker: 'VWCE',
     type: 'ETF',
@@ -1326,6 +1561,7 @@ const demoHoldings = [
     change: 8.2,
   ),
   DemoHolding(
+    id: 'hold_2',
     name: 'Apple Inc.',
     ticker: 'AAPL',
     type: 'Stock',
@@ -1334,6 +1570,7 @@ const demoHoldings = [
     change: 2.1,
   ),
   DemoHolding(
+    id: 'hold_3',
     name: 'iShares Core MSCI World',
     ticker: 'IWDA',
     type: 'ETF',
@@ -1342,6 +1579,7 @@ const demoHoldings = [
     change: -1.4,
   ),
   DemoHolding(
+    id: 'hold_4',
     name: 'Bitcoin',
     ticker: 'BTC',
     type: 'Crypto',
@@ -1350,6 +1588,7 @@ const demoHoldings = [
     change: 12.6,
   ),
   DemoHolding(
+    id: 'hold_5',
     name: 'Cash · brokerage',
     ticker: 'USD',
     type: 'Cash',
@@ -1628,10 +1867,10 @@ class ConvertedAmountText extends StatelessWidget {
           Text(
             moneyNative(amount.abs(), from),
             style: secondaryStyle ??
-                const TextStyle(
-                  color: Color(0xFF8898AA),
+                TextStyle(
+                  color: context.dashSoftMute,
                   fontSize: 11,
-                  fontFeatures: [FontFeature.tabularFigures()],
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
             textAlign: textAlign,
           ),

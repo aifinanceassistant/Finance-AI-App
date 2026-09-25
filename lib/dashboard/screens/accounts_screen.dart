@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
+import '../dash_colors.dart';
 import '../accounts_controller.dart';
 import '../accounts_scope.dart';
 import '../dash_sheets.dart';
@@ -65,7 +66,9 @@ Object? _accountValue(DemoAccount a, String field) {
 }
 
 class AccountsScreen extends StatefulWidget {
-  const AccountsScreen({super.key});
+  const AccountsScreen({super.key, this.onRefresh});
+
+  final Future<void> Function()? onRefresh;
 
   @override
   State<AccountsScreen> createState() => _AccountsScreenState();
@@ -75,9 +78,6 @@ class _AccountsScreenState extends State<AccountsScreen> {
   List<FilterRule> _filterRules = [];
   List<SortRule> _sortRules = [];
   String _search = '';
-  var _showStats = false;
-  var _groupByInstitution = true;
-  final _expandedInstitutions = <String>{};
 
   AccountsController get _ctrl => AccountsScope.of(context);
 
@@ -204,27 +204,27 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 },
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Powered by Plaid’s institution catalog when configured.',
-                style: TextStyle(fontSize: 11, color: Color(0xFF8898AA)),
+                style: TextStyle(fontSize: 11, color: context.dashSoftMute),
               ),
               const SizedBox(height: 12),
               if (searching)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
                   child: Center(
                     child: Text(
                       'Searching…',
-                      style: TextStyle(color: Color(0xFF8898AA)),
+                      style: TextStyle(color: context.dashSoftMute),
                     ),
                   ),
                 )
               else if (hits.isEmpty && searchCtrl.text.trim().isNotEmpty)
                 Text(
                   'No match — use Other to enter a custom name.',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: AppColors.ink,
+                    color: context.dashInk,
                     fontSize: 13,
                   ),
                 )
@@ -233,10 +233,10 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Material(
-                      color: Colors.white,
+                      color: context.dashPanel,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: const BorderSide(color: Color(0xFFE3E8EE)),
+                        side: BorderSide(color: context.dashLine),
                       ),
                       child: ListTile(
                         title: Text(
@@ -305,9 +305,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFF6F9FC),
+              color: context.dashSurface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE3E8EE)),
+              border: Border.all(color: context.dashLine),
             ),
             child: Row(
               children: [
@@ -315,20 +315,20 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'INSTITUTION',
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.6,
-                          color: Color(0xFF8898AA),
+                          color: context.dashSoftMute,
                         ),
                       ),
                       Text(
                         institution!,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: AppColors.ink,
+                          color: context.dashInk,
                         ),
                       ),
                     ],
@@ -352,11 +352,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
             children: [
               selectedChip(),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'How do you want to connect?',
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF697386),
+                  color: context.dashMute,
                   fontSize: 12,
                 ),
               ),
@@ -364,13 +364,19 @@ class _AccountsScreenState extends State<AccountsScreen> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
+                  gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0xFFEEF6FC), Colors.white],
+                    colors: context.isDark
+                        ? [context.dashElevated, context.dashPanel]
+                        : const [Color(0xFFEEF6FC), Colors.white],
                   ),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFD7E6F4)),
+                  border: Border.all(
+                    color: context.isDark
+                        ? context.dashLine
+                        : const Color(0xFFD7E6F4),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,9 +415,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     const SizedBox(height: 6),
                     Text(
                       'Securely link $institution. Import accounts and sync balances.',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: Color(0xFF697386),
+                        color: context.dashMute,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -426,9 +432,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: context.dashPanel,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFE3E8EE)),
+                  border: Border.all(color: context.dashLine),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -441,11 +447,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    Text(
                       'Type the account details yourself. Balances won’t auto-update from the bank.',
                       style: TextStyle(
                         fontSize: 13,
-                        color: Color(0xFF697386),
+                        color: context.dashMute,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -773,35 +779,117 @@ class _AccountsScreenState extends State<AccountsScreen> {
     balanceCtrl.dispose();
   }
 
+  Future<void> _accountRowActions(DemoAccount a) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: context.dashPanel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Edit'),
+                onTap: () => Navigator.pop(ctx, 'edit'),
+              ),
+              if (a.provider == 'plaid') ...[
+                ListTile(
+                  leading: const Icon(Icons.sync_rounded),
+                  title: const Text('Sync'),
+                  onTap: () => Navigator.pop(ctx, 'sync'),
+                ),
+                ListTile(
+                  leading: Icon(
+                    Icons.link_rounded,
+                    color: a.status == TxnStatus.failed
+                        ? AppColors.danger
+                        : null,
+                  ),
+                  title: Text(
+                    'Reconnect',
+                    style: TextStyle(
+                      color: a.status == TxnStatus.failed
+                          ? AppColors.danger
+                          : null,
+                    ),
+                  ),
+                  onTap: () => Navigator.pop(ctx, 'reconnect'),
+                ),
+              ],
+              ListTile(
+                leading: Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+                title: Text('Remove', style: TextStyle(color: AppColors.danger)),
+                onTap: () => Navigator.pop(ctx, 'remove'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (!mounted || action == null) return;
+    final key = AccountsController.accountKey(a);
+    if (action == 'edit') {
+      await _openEditSheet(a);
+      return;
+    }
+    if (action == 'sync') {
+      await _ctrl.syncOne(key);
+      if (!mounted) return;
+      toast(context, 'Synced');
+      return;
+    }
+    if (action == 'reconnect') {
+      try {
+        final result = await _ctrl.reconnect(key);
+        if (!mounted) return;
+        if (result == null) return;
+        toast(context, '${result.institutionName} reconnected');
+      } catch (e) {
+        if (!mounted) return;
+        toast(context, e.toString().replaceFirst('Exception: ', ''));
+      }
+      return;
+    }
+    if (action == 'remove') {
+      final ok = await _ctrl.remove(key);
+      if (!mounted) return;
+      toast(context, ok ? 'Connection removed' : 'Could not remove');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _filtered;
     final total = filtered.fold<double>(0, (s, a) => s + a.balance);
     final loading = _ctrl.loading;
+    final canWrite =
+        SpacesScope.maybeOf(context)?.can('accounts', 'write') != false;
+    final subtitle = filtered.length == _accounts.length
+        ? '${filtered.length} linked'
+        : '${filtered.length} of ${_accounts.length} linked';
 
-    return ListView(
+    return dashPullToRefresh(
+      onRefresh: widget.onRefresh ?? _refreshAll,
+      backgroundColor: context.dashPanel,
+      child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 28),
       children: [
-        DashPageHeader(
+        DashFeedChrome(
           title: 'Accounts',
-          subtitle: 'Linked banks and cards',
-          actions: [
-            GhostButton(label: 'Refresh all', onPressed: _refreshAll),
-            AccentButton(
-              label: 'Connect bank',
-              onPressed: SpacesScope.maybeOf(context)?.can('accounts', 'write') ==
-                      false
-                  ? null
-                  : _openConnectSheet,
-            ),
-          ],
-        ),
-        if (loading)
-          const DashLoadingBody(kpiCount: 1, listRows: 5)
-        else ...[
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-          child: FilterSortBar(
+          subtitle: subtitle,
+          onSecondary: _refreshAll,
+          secondaryIcon: Icons.sync_rounded,
+          secondaryTooltip: 'Refresh all',
+          onPrimary: _openConnectSheet,
+          primaryTooltip: 'Connect bank',
+          primaryEnabled: canWrite,
+          metaLine: 'Total ${money(total)}',
+          filterBar: FilterSortBar(
             fields: _filterFields,
             rules: _filterRules,
             sorts: _sortRules,
@@ -813,449 +901,107 @@ class _AccountsScreenState extends State<AccountsScreen> {
             searchHint: 'Search accounts…',
             onRulesChanged: (rules) => setState(() => _filterRules = rules),
             onSortsChanged: (sorts) => setState(() => _sortRules = sorts),
-            showStats: _showStats,
-            onShowStatsChanged: (v) => setState(() => _showStats = v),
+            iconButtons: true,
+            expandSearch: true,
           ),
         ),
-        if (_showStats) ...[
+        if (loading)
+          const DashLoadingBody(kpiCount: 1, listRows: 5)
+        else
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: DashPanel(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Total balance',
-                    style: TextStyle(
-                      color: AppColors.mute,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    money(total),
-                    style: const TextStyle(
-                      color: AppColors.ink,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.6,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Across ${filtered.length} of ${_accounts.length} linked accounts',
-                    style: const TextStyle(
-                      color: AppColors.softMute,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: DashPanel(
-            child: Column(
-              children: [
-                DashPanelHeader(
-                  title: 'Accounts',
-                  subtitle: 'Open banking connections',
-                  action: InkWell(
-                    onTap: () => setState(
-                      () => _groupByInstitution = !_groupByInstitution,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 2,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: Checkbox(
-                              value: _groupByInstitution,
-                              onChanged: (v) => setState(
-                                () => _groupByInstitution = v ?? false,
-                              ),
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Text(
-                            'Group by institution',
-                            style: TextStyle(
-                              color: AppColors.mute,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                if (filtered.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 28),
+            child: filtered.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 24, 0, 28),
                     child: Text(
                       _accounts.isEmpty
                           ? 'No accounts linked yet'
                           : 'No accounts match these filters',
-                      style: const TextStyle(
-                        color: AppColors.mute,
+                      style: TextStyle(
+                        color: context.dashMute,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                   )
-                else if (_groupByInstitution)
-                  for (final group in _institutionGroups(filtered)) ...[
-                    Material(
-                      color: const Color(0xFFF8FAFC),
-                      child: InkWell(
-                        onTap: () => setState(() {
-                          if (_expandedInstitutions.contains(
-                            group.institution,
-                          )) {
-                            _expandedInstitutions.remove(group.institution);
-                          } else {
-                            _expandedInstitutions.add(group.institution);
-                          }
-                        }),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.fromLTRB(12, 10, 16, 10),
-                          decoration: const BoxDecoration(
-                            border: Border(
-                              top: BorderSide(color: AppColors.line),
-                            ),
-                          ),
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final group in _institutionGroups(filtered)) ...[
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(0, 14, 0, 6),
                           child: Row(
                             children: [
-                              Icon(
-                                _expandedInstitutions.contains(
-                                      group.institution,
-                                    )
-                                    ? Icons.expand_more_rounded
-                                    : Icons.chevron_right_rounded,
-                                size: 18,
-                                color: AppColors.softMute,
-                              ),
-                              const SizedBox(width: 2),
                               Expanded(
-                                child: Text.rich(
-                                  TextSpan(
-                                    children: [
-                                      TextSpan(
-                                        text: group.institution,
-                                        style: const TextStyle(
-                                          color: AppColors.ink,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                      TextSpan(
-                                        text:
-                                            '  ${group.accounts.length} account${group.accounts.length == 1 ? '' : 's'}',
-                                        style: const TextStyle(
-                                          color: AppColors.softMute,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
+                                child: Text(
+                                  group.institution,
+                                  style: TextStyle(
+                                    color: context.dashMute,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ),
                               Text(
-                                group.totalLabel,
-                                style: const TextStyle(
-                                  color: AppColors.ink,
+                                '${group.accounts.length} · ${group.totalLabel}',
+                                style: TextStyle(
+                                  color: context.dashSoftMute,
                                   fontSize: 12,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ),
-                    ),
-                    if (_expandedInstitutions.contains(group.institution))
-                      for (final a in group.accounts)
-                        _buildAccountTile(a, hideInstitution: true),
-                  ]
-                else
-                  for (final a in filtered) _buildAccountTile(a),
-              ],
-            ),
-          ),
-        ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildAccountTile(
-    DemoAccount a, {
-    bool hideInstitution = false,
-  }) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.line)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  a.displayName,
-                  style: const TextStyle(
-                    color: AppColors.ink,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if (!hideInstitution) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    a.bank,
-                    style: const TextStyle(
-                      color: AppColors.softMute,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Text(
-                      a.digits.isEmpty ? a.type : '${a.type} · ',
-                      style: const TextStyle(
-                        color: AppColors.mute,
-                        fontSize: 12,
-                      ),
-                    ),
-                    Text(
-                      a.provider == 'plaid'
-                          ? (a.digits.isEmpty ? 'Plaid' : 'Plaid · ')
-                          : (a.digits.isEmpty ? 'Manual' : 'Manual · '),
-                      style: TextStyle(
-                        color: a.provider == 'plaid'
-                            ? const Color(0xFF2A7FC4)
-                            : AppColors.mute,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    AccountNumber(account: a),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _AccountConnectionPill(account: a),
-                    const SizedBox(width: 8),
-                    Text(
-                      a.synced,
-                      style: const TextStyle(
-                        color: AppColors.softMute,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    if (a.provider == 'plaid') ...[
-                      _AccountAction(
-                        icon: Icons.sync_rounded,
-                        label: 'Sync',
-                        onTap: () async {
-                          final key = AccountsController.accountKey(a);
-                          await _ctrl.syncOne(key);
-                          if (!mounted) return;
-                          toast(context, 'Synced');
-                        },
-                      ),
-                      _AccountAction(
-                        icon: Icons.link_rounded,
-                        label: 'Reconnect',
-                        emphasize: a.status == TxnStatus.failed,
-                        onTap: () async {
-                          final key = AccountsController.accountKey(a);
-                          try {
-                            final result = await _ctrl.reconnect(key);
-                            if (!mounted) return;
-                            if (result == null) return;
-                            toast(
-                              context,
-                              '${result.institutionName} reconnected',
-                            );
-                          } catch (e) {
-                            if (!mounted) return;
-                            toast(
-                              context,
-                              e.toString().replaceFirst('Exception: ', ''),
-                            );
-                          }
-                        },
-                      ),
+                        for (final a in group.accounts) _buildAccountRow(a),
+                      ],
                     ],
-                    _AccountAction(
-                      icon: Icons.edit_outlined,
-                      label: 'Edit',
-                      onTap: () => _openEditSheet(a),
-                    ),
-                    _AccountAction(
-                      icon: Icons.delete_outline_rounded,
-                      label: 'Remove',
-                      danger: true,
-                      onTap: () async {
-                        final key = AccountsController.accountKey(a);
-                        final ok = await _ctrl.remove(key);
-                        if (!mounted) return;
-                        toast(
-                          context,
-                          ok ? 'Connection removed' : 'Could not remove',
-                        );
-                      },
-                    ),
-                  ],
+                  ),
+          ),
+      ],
+    ),
+    );
+  }
+
+  Widget _buildAccountRow(DemoAccount a) {
+    final bal = a.originalBalance ?? a.balance;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openEditSheet(a),
+        onLongPress: () => _accountRowActions(a),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: context.dashLine),
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  a.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.dashInk,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ],
-            ),
-          ),
-          Text(
-            moneyNative(
-              a.originalBalance ?? a.balance,
-              a.nativeCurrency,
-            ),
-            style: TextStyle(
-              color: (a.originalBalance ?? a.balance) < 0
-                  ? AppColors.danger
-                  : AppColors.ink,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AccountConnectionPill extends StatelessWidget {
-  const _AccountConnectionPill({required this.account});
-
-  final DemoAccount account;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = _accountStatusLabel(account);
-    final (Color bg, Color fg) = switch (label) {
-      'Linked' => (const Color(0xFFE6F9F1), AppColors.success),
-      'Manual' => (const Color(0xFFF0F3F7), AppColors.mute),
-      'Pending' => (const Color(0xFFFFF8E6), AppColors.warning),
-      _ => (const Color(0xFFFDE8E8), AppColors.danger),
-    };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: fg, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: fg,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AccountAction extends StatelessWidget {
-  const _AccountAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.danger = false,
-    this.emphasize = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool danger;
-  final bool emphasize;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = danger || emphasize ? AppColors.danger : AppColors.mute;
-    return Tooltip(
-      message: label,
-      waitDuration: const Duration(milliseconds: 250),
-      preferBelow: false,
-      verticalOffset: 18,
-      decoration: BoxDecoration(
-        color: AppColors.ink,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      textStyle: const TextStyle(
-        color: Colors.white,
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.only(right: 4),
-        child: Material(
-          color: emphasize ? const Color(0xFFFEF2F2) : Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: emphasize
-                ? const BorderSide(color: Color(0xFFFECACA))
-                : BorderSide.none,
-          ),
-          child: InkWell(
-            onTap: () {
-              Tooltip.dismissAllToolTips();
-              onTap();
-            },
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Icon(icon, size: 18, color: color),
-            ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                moneyNative(bal, a.nativeCurrency),
+                style: TextStyle(
+                  color: bal < 0 ? AppColors.danger : context.dashInk,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
           ),
         ),
       ),

@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../auth/auth_controller.dart';
 import '../../auth/auth_scope.dart';
 import '../../billing/stripe_billing.dart';
+import '../../locale/locale_controller.dart';
 import '../../onboarding/onboarding_flow.dart';
 import '../../theme/app_theme.dart';
+import '../accounts_scope.dart';
+import '../dash_colors.dart';
 import '../../variations/models.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
 import '../form_validation.dart';
+import '../shimmer.dart';
 import '../spaces_scope.dart';
 import '../ui.dart';
+import 'mcp_keys_screen.dart';
 import 'users_permissions_screen.dart';
 
 const _appVersion = '26.9.8+1521 (Build: 981)';
@@ -21,6 +27,7 @@ const _sections = [
   ('profile', 'Profile'),
   ('preferences', 'Preferences'),
   ('users-permissions', 'Users & permissions'),
+  ('mcp-keys', 'MCP & API keys'),
   ('account', 'Account'),
   ('security', 'Security'),
   ('plan', 'Plan'),
@@ -28,6 +35,11 @@ const _sections = [
   ('banks', 'Banks'),
   ('privacy', 'Privacy'),
   ('about', 'About'),
+];
+
+const _languages = [
+  ('en', 'English'),
+  ('fr', 'Français'),
 ];
 
 const _currencies = [
@@ -72,7 +84,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late String _section;
   final _nameCtrl = TextEditingController(text: 'Alex Rivera');
   final _emailCtrl = TextEditingController(text: 'alex@financeai.app');
   final _phoneCtrl = TextEditingController(text: '+1 (415) 555-0142');
@@ -85,7 +96,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _rollover = false;
   bool _recurringAutoApply = false;
   bool _transactionsFoldingMode = true;
-  bool _twoFa = true;
   bool _shareAnalytics = false;
   String _planId = 'team';
   String _planLabel = 'No active plan';
@@ -94,6 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _billingLoaded = false;
   String _spaceSwitcher = 'tabs';
   List<String> _tags = ['Business'];
+  String _language = 'en';
   String? _nameError;
   String? _emailError;
   String? _phoneError;
@@ -102,15 +113,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ? 'alex@financeai.app'
       : _emailCtrl.text.trim();
 
-  List<DemoAccount> get _banks => accountsStore.value;
+  /// Prefer live AccountsController when settings was opened under the shell;
+  /// fall back to [accountsStore] (kept in sync by AccountsController._publish).
+  List<DemoAccount> get _banks {
+    final fromScope = AccountsScope.maybeOf(context)?.accounts;
+    if (fromScope != null) return fromScope;
+    return accountsStore.value;
+  }
 
   @override
   void initState() {
     super.initState();
-    final allowed = _sections.map((s) => s.$1).toSet();
-    _section = allowed.contains(widget.initialSection)
-        ? widget.initialSection
-        : 'general';
     accountsStore.addListener(_onBanksChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -132,22 +145,111 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (data['transactionsFoldingMode'] is bool) {
         _transactionsFoldingMode = data['transactionsFoldingMode'] as bool;
       }
-      final name = (data['full_name'] as String?)?.trim();
-      if (name != null && name.isNotEmpty) {
-        _nameCtrl.text = name;
-        final parts = name.split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
+      final first = (data['firstName'] as String?)?.trim() ?? '';
+      final last = (data['lastName'] as String?)?.trim() ?? '';
+      final full = (data['full_name'] as String?)?.trim() ?? '';
+      final name = [first, last].where((p) => p.isNotEmpty).join(' ');
+      final display = name.isNotEmpty ? name : full;
+      if (display.isNotEmpty) {
+        _nameCtrl.text = display;
+        final parts = display.split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
         _initials = parts.take(2).map((p) => p[0].toUpperCase()).join();
       }
       final email = (data['email'] as String?)?.trim();
       if (email != null && email.isNotEmpty) _emailCtrl.text = email;
       if (data['phone'] is String) _phoneCtrl.text = data['phone'] as String;
-      final currency = (data['currency'] as String?)?.trim();
+      final currency = (data['currency'] as String?)?.trim().toUpperCase();
       if (currency != null && currency.isNotEmpty) {
-        _currency = currency;
-        DisplayCurrency.setCode(currency);
+        _currency = _currencies.contains(currency) ? currency : 'USD';
+        DisplayCurrency.setCode(_currency);
+      }
+      final lang = (data['language'] as String?)?.trim().toLowerCase();
+      if (lang != null && lang.isNotEmpty) {
+        _language = lang.startsWith('fr') ? 'fr' : 'en';
+        final localeCtrl = LocaleScope.maybeOf(context);
+        if (localeCtrl != null) {
+          // ignore: discarded_futures
+          localeCtrl.applyCode(_language, persist: true);
+        }
       }
     });
     await _refreshFxRate(AuthScope.read(context), _currency);
+  }
+
+  Future<void> _setLanguage(String code) async {
+    final next = code.startsWith('fr') ? 'fr' : 'en';
+    setState(() => _language = next);
+    final auth = AuthScope.read(context);
+    final localeCtrl = LocaleScope.maybeOf(context);
+    await auth.apiDecode(
+      'PATCH',
+      '/api/profile',
+      body: {'language': next},
+    );
+    if (localeCtrl != null) {
+      await localeCtrl.setLanguage(next);
+    }
+    if (!mounted) return;
+    toast(
+      context,
+      next == 'fr'
+          ? 'Langue enregistrée · more translations rolling out'
+          : 'Language saved · more translations rolling out',
+    );
+  }
+
+  Future<void> _saveProfile() async {
+    final nameErr = requiredText(_nameCtrl.text, 'Name');
+    final emailErr = emailValidator(_emailCtrl.text);
+    final phoneErr = optionalPhone(_phoneCtrl.text);
+    setState(() {
+      _nameError = nameErr;
+      _emailError = emailErr;
+      _phoneError = phoneErr;
+    });
+    final first = nameErr ?? emailErr ?? phoneErr;
+    if (first != null) {
+      toast(context, first);
+      return;
+    }
+
+    final parts = _nameCtrl.text
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+    final firstName = parts.isEmpty ? '' : parts.first;
+    final lastName = parts.length <= 1 ? '' : parts.sublist(1).join(' ');
+    final fullName = [firstName, lastName].where((p) => p.isNotEmpty).join(' ');
+
+    final auth = AuthScope.read(context);
+    final result = await auth.apiDecode(
+      'PATCH',
+      '/api/profile',
+      body: {
+        'firstName': firstName,
+        'lastName': lastName,
+        'full_name': fullName,
+        'phone': _phoneCtrl.text.trim(),
+      },
+    );
+    if (!mounted) return;
+    if (result == null) {
+      toast(context, 'Could not save profile');
+      return;
+    }
+    setState(() {
+      _initials = parts.take(2).map((p) => p[0].toUpperCase()).join();
+      if (_initials.isEmpty) _initials = 'AR';
+    });
+    toast(context, 'Profile saved');
+  }
+
+  Future<void> _openHelpUrl(String path) async {
+    final uri = Uri.parse('https://financeai.app$path');
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!mounted) return;
+    if (!ok) toast(context, 'Could not open link');
   }
 
   Future<void> _refreshFxRate(AuthController auth, String currency) async {
@@ -245,60 +347,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'Settings',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+    return DashModalScaffold(
       body: ListView(
         padding: const EdgeInsets.only(bottom: 28),
         children: [
-          const DashPageHeader(
-            title: 'Settings',
-            subtitle: 'Profile, plan, privacy, and connections',
+          const DashFeedChrome(
+            title: 'Profile and settings',
+            subtitle: 'Account, plan, privacy, and connections',
+            showPrimary: false,
           ),
-          SizedBox(
-            height: 44,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              children: [
-                for (final s in _sections)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(s.$2),
-                      selected: _section == s.$1,
-                      onSelected: (_) => setState(() => _section = s.$1),
-                    ),
+          for (final s in _sections)
+            Theme(
+              data: Theme.of(context).copyWith(
+                dividerColor: Colors.transparent,
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
+              ),
+              child: ExpansionTile(
+                key: PageStorageKey<String>('settings-stack-${s.$1}'),
+                initiallyExpanded: false,
+                maintainState: true,
+                tilePadding: const EdgeInsets.symmetric(horizontal: 20),
+                childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                backgroundColor: Colors.transparent,
+                collapsedBackgroundColor: Colors.transparent,
+                shape: Border(
+                  bottom: BorderSide(color: context.dashLine),
+                ),
+                collapsedShape: Border(
+                  bottom: BorderSide(color: context.dashLine),
+                ),
+                iconColor: context.dashMute,
+                collapsedIconColor: context.dashMute,
+                textColor: context.dashInk,
+                collapsedTextColor: context.dashInk,
+                title: Text(
+                  s.$2,
+                  style: TextStyle(
+                    color: context.dashInk,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
                   ),
-              ],
+                ),
+                children: [_bodyFor(s.$1)],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: DashPanel(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-              child: _sectionBody(),
-            ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _sectionBody() {
-    switch (_section) {
+  Widget _bodyFor(String section) {
+    switch (section) {
       case 'profile':
         return _profileBody();
       case 'preferences':
         return _preferencesBody();
       case 'users-permissions':
         return _usersPermissionsBody();
+      case 'mcp-keys':
+        return _mcpKeysBody();
       case 'account':
         return _accountBody();
       case 'security':
@@ -319,13 +427,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Widget _mcpKeysBody() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Create keys for Claude, ChatGPT, and other MCP clients.',
+          style: TextStyle(color: context.dashMute, fontSize: 13, height: 1.4),
+        ),
+        const SizedBox(height: 14),
+        AccentButton(
+          label: 'Manage MCP & API keys',
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const McpKeysScreen(),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _usersPermissionsBody() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           'Manage who can access this space and what they can do.',
-          style: TextStyle(color: AppColors.mute, fontSize: 13, height: 1.4),
+          style: TextStyle(color: context.dashMute, fontSize: 13, height: 1.4),
         ),
         const SizedBox(height: 14),
         AccentButton(
@@ -349,7 +480,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _generalBody() {
-    final appearance = VariationScope.of(context).appearance;
+    final variations = VariationScope.of(context);
+    final appearance = variations.appearance;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -443,7 +575,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             CircleAvatar(
               radius: 28,
-              backgroundColor: const Color(0xFFE7F0FF),
+              backgroundColor: context.dashWash,
               child: Text(
                 _initials,
                 style: const TextStyle(
@@ -458,12 +590,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Profile photo',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
+                      color: context.dashInk,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -501,22 +633,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           alignment: Alignment.centerRight,
           child: AccentButton(
             label: 'Save',
-            onPressed: () {
-              final nameErr = requiredText(_nameCtrl.text, 'Name');
-              final emailErr = emailValidator(_emailCtrl.text);
-              final phoneErr = optionalPhone(_phoneCtrl.text);
-              setState(() {
-                _nameError = nameErr;
-                _emailError = emailErr;
-                _phoneError = phoneErr;
-              });
-              final first = nameErr ?? emailErr ?? phoneErr;
-              if (first != null) {
-                toast(context, first);
-                return;
-              }
-              toast(context, 'Profile saved');
-            },
+            onPressed: _saveProfile,
           ),
         ),
       ],
@@ -527,6 +644,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const DashFieldLabel('Language'),
+        DashDropdown<String>(
+          value: _language,
+          items: _languages.map((e) => e.$1).toList(),
+          onChanged: (v) {
+            // ignore: discarded_futures
+            _setLanguage(v);
+          },
+          labelOf: (code) => _languages
+              .firstWhere((e) => e.$1 == code, orElse: () => _languages.first)
+              .$2,
+        ),
+        const SizedBox(height: 16),
         const DashFieldLabel('Display currency'),
         DashDropdown<String>(
           value: _currency,
@@ -540,7 +670,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Text(
           'Choose where you switch between spaces',
           style: TextStyle(
-            color: AppColors.mute,
+            color: context.dashMute,
             fontSize: 12,
             fontWeight: FontWeight.w500,
           ),
@@ -561,19 +691,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   border: Border.all(
                     color: _spaceSwitcher == opt.$1
                         ? AppColors.accent
-                        : AppColors.line,
+                        : context.dashLine,
                   ),
                   color: _spaceSwitcher == opt.$1
-                      ? const Color(0xFFF5F9FD)
-                      : Colors.white,
+                      ? context.dashElevated
+                      : context.dashPanel,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       opt.$2,
-                      style: const TextStyle(
-                        color: AppColors.ink,
+                      style: TextStyle(
+                        color: context.dashInk,
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                       ),
@@ -581,8 +711,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 2),
                     Text(
                       opt.$3,
-                      style: const TextStyle(
-                        color: AppColors.mute,
+                      style: TextStyle(
+                        color: context.dashMute,
                         fontSize: 12,
                       ),
                     ),
@@ -640,9 +770,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         _SettingsRow(
           title: 'Two-factor authentication',
-          body: 'Require a code when you sign in',
-          action: _twoFa ? 'Disable 2FA' : 'Enable 2FA',
-          onTap: _authenticatorSheet,
+          body: 'Authenticator codes · coming soon',
+          action: 'Coming soon',
+          onTap: () => toast(context, 'Two-factor authentication · coming soon'),
         ),
         const SizedBox(height: 12),
         const _BlockTitle('Actions'),
@@ -651,10 +781,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           body: 'Go through onboarding without logging out',
           action: 'Restart',
           onTap: () {
-            Navigator.of(context).push(
+            Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute<void>(
                 builder: (_) => const OnboardingFlow(),
               ),
+              (route) => false,
             );
           },
         ),
@@ -702,7 +833,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Text('Log out'),
             ),
             OutlinedButton(
-              onPressed: _sessionsSheet,
+              onPressed: () =>
+                  toast(context, 'Log out of all devices · coming soon'),
               child: const Text('Log out of all devices'),
             ),
             TextButton(
@@ -730,17 +862,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         _SettingsRow(
           title: 'Authenticator',
-          body: _twoFa
-              ? 'Two-factor codes via authenticator app · On'
-              : 'Two-factor codes via authenticator app · Off',
-          action: 'Manage',
-          onTap: _authenticatorSheet,
+          body: 'Two-factor codes via authenticator app · coming soon',
+          action: 'Coming soon',
+          onTap: () => toast(context, 'Two-factor authentication · coming soon'),
         ),
         _SettingsRow(
           title: 'Active sessions',
-          body: 'Sign out of other devices',
-          action: 'Review',
-          onTap: _sessionsSheet,
+          body: 'Sign out of other devices · coming soon',
+          action: 'Coming soon',
+          onTap: () => toast(context, 'Session management · coming soon'),
           showDivider: false,
         ),
       ],
@@ -754,9 +884,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: context.dashSurface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.line),
+            border: Border.all(color: context.dashLine),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -768,22 +898,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _billingLoaded ? _planLabel : 'Loading…',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.ink,
+                        if (_billingLoaded)
+                          Text(
+                            _planLabel,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: context.dashInk,
+                            ),
+                          )
+                        else
+                          const Padding(
+                            padding: EdgeInsets.only(top: 2, bottom: 2),
+                            child: ShimmerBox(width: 120, height: 16),
                           ),
-                        ),
                         const SizedBox(height: 2),
-                        Text(
-                          _planSubtitle,
-                          style: const TextStyle(
-                            color: AppColors.mute,
-                            fontSize: 13,
-                          ),
-                        ),
+                        if (_billingLoaded)
+                          Text(
+                            _planSubtitle,
+                            style: TextStyle(
+                              color: context.dashMute,
+                              fontSize: 13,
+                            ),
+                          )
+                        else
+                          const ShimmerBox(width: 180, height: 12),
                       ],
                     ),
                   ),
@@ -809,7 +948,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Material(
             color: _planId == tier.$1
                 ? AppColors.brand.withValues(alpha: 0.08)
-                : AppColors.surface,
+                : context.dashSurface,
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
@@ -821,7 +960,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   border: Border.all(
                     color: _planId == tier.$1
                         ? AppColors.brand
-                        : AppColors.line,
+                        : context.dashLine,
                   ),
                 ),
                 child: Row(
@@ -840,8 +979,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(height: 2),
                           Text(
                             tier.$3,
-                            style: const TextStyle(
-                              color: AppColors.mute,
+                            style: TextStyle(
+                              color: context.dashMute,
                               fontSize: 13,
                             ),
                           ),
@@ -875,6 +1014,102 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _subscriptionBody() {
     return Column(
       children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: context.dashSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.dashLine),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: context.dashWash,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.smart_toy_outlined,
+                      color: AppColors.accent,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'AI credits',
+                          style: TextStyle(
+                            color: context.dashInk,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '842 of 1,200 · Resets Apr 1',
+                          style: TextStyle(
+                            color: context.dashMute,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const ProgressTrack(
+                progress: 842 / 1200,
+                color: AppColors.accent,
+                height: 6,
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _billingLoaded ? _planLabel : '…',
+                          style: TextStyle(
+                            color: context.dashInk,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _billingLoaded
+                              ? _planSubtitle
+                              : 'Loading plan…',
+                          style: TextStyle(
+                            color: context.dashMute,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  LinkAction(
+                    label: _subscriptionActive ? 'Manage' : 'Subscribe',
+                    onTap: () => _manageBilling(plan: _planId),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
         const Text(
           'Subscribe to FinanceAI today',
           textAlign: TextAlign.center,
@@ -885,10 +1120,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'See for yourself how FinanceAI can help you own your financial future.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.mute, fontSize: 13, height: 1.4),
+          style: TextStyle(color: context.dashMute, fontSize: 13, height: 1.4),
         ),
         const SizedBox(height: 14),
         const Text(
@@ -904,11 +1139,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: context.dashSurface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.line),
+            border: Border.all(color: context.dashLine),
           ),
-          child: const Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('★★★★★', style: TextStyle(color: Color(0xFFF5B942))),
@@ -920,7 +1155,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               SizedBox(height: 4),
               Text(
                 'This is by far the best budgeting app I have ever used.',
-                style: TextStyle(color: AppColors.mute, fontSize: 12.5),
+                style: TextStyle(color: context.dashMute, fontSize: 12.5),
               ),
             ],
           ),
@@ -931,10 +1166,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onPressed: _subscribeSheet,
         ),
         const SizedBox(height: 10),
-        const Text(
+        Text(
           'Sales tax may apply. Subscription renews automatically. Cancel anytime.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.softMute, fontSize: 11),
+          style: TextStyle(color: context.dashSoftMute, fontSize: 11),
         ),
       ],
     );
@@ -957,13 +1192,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 8),
         if (_banks.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 28),
             child: Text(
               'No institutions connected.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: AppColors.mute,
+                color: context.dashMute,
                 fontStyle: FontStyle.italic,
               ),
             ),
@@ -1004,13 +1239,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onTap: _deleteSheet,
         ),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           'Legal',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.8,
-            color: AppColors.softMute,
+            color: context.dashSoftMute,
           ),
         ),
         const SizedBox(height: 4),
@@ -1068,6 +1303,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 8),
         const _BlockTitle('Help'),
+        _SettingsRow(
+          title: 'FAQ',
+          body: 'Common questions about FinanceAI',
+          action: 'Open',
+          onTap: () => _openHelpUrl('/faq'),
+        ),
+        _SettingsRow(
+          title: 'Docs',
+          body: 'Guides and product documentation',
+          action: 'Open',
+          onTap: () => _openHelpUrl('/docs'),
+        ),
         _SettingsRow(
           title: 'Browse help articles',
           action: 'Open help center',
@@ -1129,14 +1376,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             Row(
               children: [
-                const Text(
+                Text(
                   'Preview:',
-                  style: TextStyle(color: AppColors.mute, fontSize: 13),
+                  style: TextStyle(color: context.dashMute, fontSize: 13),
                 ),
                 const SizedBox(width: 10),
                 CircleAvatar(
                   radius: 20,
-                  backgroundColor: const Color(0xFFE7F0FF),
+                  backgroundColor: context.dashWash,
                   child: Text(
                     _initials,
                     style: const TextStyle(
@@ -1263,92 +1510,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     confirm.dispose();
   }
 
-  Future<void> _authenticatorSheet() async {
-    var draft = _twoFa;
-    await showDashSheet<void>(
-      context: context,
-      title: 'Two-factor authentication',
-      description: 'Add an extra layer of security by requiring a code when you sign in',
-      builder: (ctx, setSheet) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              value: draft,
-              onChanged: (v) {
-                draft = v ?? false;
-                setSheet(() {});
-              },
-              title: const Text(
-                'Require authenticator codes',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-              ),
-              subtitle: const Text(
-                'Use an app like Google Authenticator or 1Password',
-                style: TextStyle(fontSize: 13, color: AppColors.mute),
-              ),
-              controlAffinity: ListTileControlAffinity.leading,
-            ),
-            const SizedBox(height: 12),
-            sheetCancelSave(
-              context: ctx,
-              saveLabel: draft ? 'Keep enabled' : 'Disable 2FA',
-              onSave: () {
-                setState(() => _twoFa = draft);
-                Navigator.pop(ctx);
-                toast(
-                  context,
-                  draft ? '2FA enabled' : '2FA disabled',
-                );
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _sessionsSheet() async {
-    await showDashSheet<void>(
-      context: context,
-      title: 'Log out of all devices',
-      description: 'Ends every active session except this one',
-      builder: (ctx, setSheet) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'You’ll stay signed in here. Other browsers and phones will need to sign in again.',
-              style: TextStyle(color: AppColors.mute, fontSize: 13, height: 1.4),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: GhostButton(
-                    label: 'Cancel',
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: AccentButton(
-                    label: 'Log out of all',
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      toast(context, 'Signed out of all devices');
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   Future<void> _paymentSheet() async {
     final card = TextEditingController(text: _card);
     String? cardError;
@@ -1438,7 +1599,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               if (inv != _invoices.last)
-                const Divider(height: 20, color: AppColors.line),
+                Divider(height: 20, color: context.dashLine),
             ],
             const SizedBox(height: 12),
             GhostButton(
@@ -1465,7 +1626,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Material(
                 color: selected == tier.$1
                     ? AppColors.brand.withValues(alpha: 0.08)
-                    : AppColors.surface,
+                    : context.dashSurface,
                 borderRadius: BorderRadius.circular(12),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
@@ -1477,7 +1638,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       border: Border.all(
                         color: selected == tier.$1
                             ? AppColors.brand
-                            : AppColors.line,
+                            : context.dashLine,
                       ),
                     ),
                     child: Row(
@@ -1496,8 +1657,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               const SizedBox(height: 2),
                               Text(
                                 tier.$3,
-                                style: const TextStyle(
-                                  color: AppColors.mute,
+                                style: TextStyle(
+                                  color: context.dashMute,
                                   fontSize: 13,
                                 ),
                               ),
@@ -1519,7 +1680,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               : Icons.radio_button_off_rounded,
                           color: selected == tier.$1
                               ? AppColors.brand
-                              : AppColors.softMute,
+                              : context.dashSoftMute,
                         ),
                       ],
                     ),
@@ -1528,9 +1689,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 10),
             ],
-            const Text(
+            Text(
               'Sales tax may apply. Subscription renews automatically.',
-              style: TextStyle(color: AppColors.softMute, fontSize: 11),
+              style: TextStyle(color: context.dashSoftMute, fontSize: 11),
             ),
             const SizedBox(height: 14),
             sheetCancelSave(
@@ -1564,8 +1725,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: SingleChildScrollView(
                 child: Text(
                   body,
-                  style: const TextStyle(
-                    color: AppColors.mute,
+                  style: TextStyle(
+                    color: context.dashMute,
                     fontSize: 13,
                     height: 1.45,
                   ),
@@ -1595,26 +1756,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text(
-                'Getting started',
+                'FAQ',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
-              subtitle: const Text('Link banks, set budgets, meet your agent'),
+              subtitle: const Text('Common questions'),
+              trailing: const Icon(Icons.open_in_new_rounded, size: 18),
               onTap: () {
                 Navigator.pop(ctx);
-                toast(context, 'Article · Getting started');
+                // ignore: discarded_futures
+                _openHelpUrl('/faq');
               },
             ),
-            const Divider(height: 1, color: AppColors.line),
+            Divider(height: 1, color: context.dashLine),
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text(
-                'Billing & plans',
+                'Docs',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
-              subtitle: const Text('Trials, renewals, and invoices'),
+              subtitle: const Text('Product documentation'),
+              trailing: const Icon(Icons.open_in_new_rounded, size: 18),
               onTap: () {
                 Navigator.pop(ctx);
-                toast(context, 'Article · Billing & plans');
+                // ignore: discarded_futures
+                _openHelpUrl('/docs');
               },
             ),
             const SizedBox(height: 12),
@@ -1637,10 +1802,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
+            Text(
               'Email support@financeai.app or start a chat from this screen. '
               'Include your account email so we can find your workspace faster.',
-              style: TextStyle(color: AppColors.mute, fontSize: 13, height: 1.4),
+              style: TextStyle(color: context.dashMute, fontSize: 13, height: 1.4),
             ),
             const SizedBox(height: 16),
             AccentButton(
@@ -1710,9 +1875,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
+            Text(
               'You’ll lose access to linked banks, goals, and AI history. Export first if you need a copy.',
-              style: TextStyle(color: AppColors.mute, fontSize: 13, height: 1.4),
+              style: TextStyle(color: context.dashMute, fontSize: 13, height: 1.4),
             ),
             const SizedBox(height: 16),
             Row(
@@ -1848,10 +2013,10 @@ class _BlockTitle extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w800,
-          color: AppColors.ink,
+          color: context.dashInk,
         ),
       ),
     );
@@ -1884,7 +2049,7 @@ class _AppearanceChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: selected ? AppColors.brand : AppColors.line,
+              color: selected ? AppColors.brand : context.dashLine,
             ),
           ),
           child: Column(
@@ -1894,7 +2059,7 @@ class _AppearanceChip extends StatelessWidget {
               Text(
                 option.label,
                 style: TextStyle(
-                  color: AppColors.ink,
+                  color: context.dashInk,
                   fontSize: 12,
                   fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                 ),
@@ -1970,7 +2135,7 @@ class _SettingsRow extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         border: showDivider
-            ? const Border(bottom: BorderSide(color: AppColors.line))
+            ? Border(bottom: BorderSide(color: context.dashLine))
             : null,
       ),
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1982,8 +2147,8 @@ class _SettingsRow extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: AppColors.ink,
+                  style: TextStyle(
+                    color: context.dashInk,
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1992,8 +2157,8 @@ class _SettingsRow extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     body!,
-                    style: const TextStyle(
-                      color: AppColors.mute,
+                    style: TextStyle(
+                      color: context.dashMute,
                       fontSize: 12,
                     ),
                   ),

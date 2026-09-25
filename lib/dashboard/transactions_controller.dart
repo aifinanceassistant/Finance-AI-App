@@ -19,7 +19,7 @@ class TransactionsController extends ChangeNotifier {
 
   List<DemoTxn> _txns = [];
   String _spaceId = '';
-  bool _loading = false;
+  bool _loading = true;
 
   List<DemoTxn> get transactions => List.unmodifiable(_txns);
   bool get loading => _loading;
@@ -300,6 +300,19 @@ class TransactionsController extends ChangeNotifier {
     };
     if (reconciled) body['status'] = _dbStatus(TxnStatus.succeeded);
     await patch(id, body);
+  }
+
+  Future<bool> remove(String id) async {
+    if (_auth.isFake) {
+      _txns = _txns.where((t) => t.id != id).toList();
+      notifyListeners();
+      return true;
+    }
+    final decoded = await _auth.apiDecode('DELETE', '/api/transactions/$id');
+    if (decoded == null) return false;
+    _txns = _txns.where((t) => t.id != id).toList();
+    notifyListeners();
+    return true;
   }
 
   Future<void> _processDueIfNeeded(String spaceId) async {

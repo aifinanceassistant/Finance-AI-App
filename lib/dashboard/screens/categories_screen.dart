@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../dash_colors.dart';
 import '../categories_controller.dart';
 import '../categories_scope.dart';
 import '../data.dart';
@@ -227,9 +228,14 @@ List<_CategoryRule> _seedRules(List<_CategoryItem> cats) {
 }
 
 class CategoriesScreen extends StatefulWidget {
-  const CategoriesScreen({super.key, this.onOpenCategory});
+  const CategoriesScreen({
+    super.key,
+    this.onOpenCategory,
+    this.onRefresh,
+  });
 
   final ValueChanged<String>? onOpenCategory;
+  final Future<void> Function()? onRefresh;
 
   @override
   State<CategoriesScreen> createState() => _CategoriesScreenState();
@@ -243,9 +249,6 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   String _groupFilter = 'all';
   List<FilterRule> _filterRules = [];
   List<SortRule> _sortRules = [];
-  bool _gridView = true;
-  bool _spendMixOpen = false;
-  var _showStats = false;
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month, 1);
   CategoriesController? _ctrl;
   var _syncedSpaceId = '';
@@ -378,7 +381,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.dashPanel,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -397,18 +400,18 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Groups',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
-                        color: AppColors.ink,
+                        color: context.dashInk,
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    Text(
                       'Create or rename sections for your categories.',
-                      style: TextStyle(color: AppColors.mute, fontSize: 13),
+                      style: TextStyle(color: context.dashMute, fontSize: 13),
                     ),
                     const SizedBox(height: 14),
                     ConstrainedBox(
@@ -419,7 +422,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                         shrinkWrap: true,
                         itemCount: groups.length,
                         separatorBuilder: (_, _) =>
-                            const Divider(height: 1, color: AppColors.line),
+                            Divider(height: 1, color: context.dashLine),
                         itemBuilder: (_, i) {
                           final g = groups[i];
                           final count =
@@ -428,15 +431,15 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                             contentPadding: EdgeInsets.zero,
                             title: Text(
                               g,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w700,
-                                color: AppColors.ink,
+                                color: context.dashInk,
                               ),
                             ),
                             subtitle: Text(
                               '$count categor${count == 1 ? 'y' : 'ies'}',
-                              style: const TextStyle(
-                                color: AppColors.mute,
+                              style: TextStyle(
+                                color: context.dashMute,
                                 fontSize: 12,
                               ),
                             ),
@@ -668,7 +671,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.dashPanel,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -684,18 +687,18 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 children: [
                   Text(
                     existing == null ? 'New category' : 'Edit category',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
-                      color: AppColors.ink,
+                      color: context.dashInk,
                     ),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
+                  Text(
                     'Name',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: AppColors.mute,
+                      color: context.dashMute,
                       fontSize: 12,
                     ),
                   ),
@@ -704,7 +707,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Material(
-                        color: AppColors.surface,
+                        color: context.dashSurface,
                         borderRadius: BorderRadius.circular(10),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(10),
@@ -720,7 +723,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: AppColors.line),
+                              border: Border.all(color: context.dashLine),
                             ),
                             child: Text(
                               emoji,
@@ -765,11 +768,11 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     child: const Text('New group'),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
+                  Text(
                     'Color',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: AppColors.mute,
+                      color: context.dashMute,
                       fontSize: 12,
                     ),
                   ),
@@ -788,7 +791,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                               shape: BoxShape.circle,
                               border: Border.all(
                                 color: color == c
-                                    ? AppColors.ink
+                                    ? context.dashInk
                                     : Colors.transparent,
                                 width: 2,
                               ),
@@ -887,7 +890,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     ];
     return showModalBottomSheet<String>(
       context: parentCtx,
-      backgroundColor: Colors.white,
+      backgroundColor: context.dashPanel,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -899,10 +902,10 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Choose emoji',
                   style: TextStyle(
-                    color: AppColors.ink,
+                    color: context.dashInk,
                     fontWeight: FontWeight.w800,
                     fontSize: 16,
                   ),
@@ -922,7 +925,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     final selected = e == current;
                     return Material(
                       color: selected
-                          ? AppColors.surface
+                          ? context.dashSurface
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(8),
                       child: InkWell(
@@ -943,6 +946,55 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     );
   }
 
+  /// True when [id] is persisted (API UUID or fake-mode seed), not a local-only key.
+  bool _isPersistedCategoryId(String id) {
+    if (id.isEmpty) return false;
+    if (id.startsWith('fake-')) return true;
+    return RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+    ).hasMatch(id);
+  }
+
+  Future<void> _deleteCategory(_CategoryItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete category?'),
+        content: Text(
+          'Permanently delete “${item.name}”? This can’t be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFC53030),
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    if (_isPersistedCategoryId(item.id)) {
+      final ok = await _ctrl?.remove(item.id) ?? false;
+      if (!mounted) return;
+      if (!ok) {
+        toast(context, 'Could not delete category');
+        return;
+      }
+    }
+    setState(() {
+      _categories.removeWhere((c) => c.id == item.id);
+      _rules.removeWhere((r) => r.categoryId == item.id);
+    });
+    toast(context, 'Category deleted');
+  }
+
   Future<void> _merge(_CategoryItem source) async {
     final targets =
         _categories.where((c) => c.id != source.id && !c.hidden).toList();
@@ -953,7 +1005,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     var targetId = targets.first.id;
     final ok = await showModalBottomSheet<bool>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: context.dashPanel,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -968,10 +1020,10 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 children: [
                   Text(
                     'Merge ${source.name}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
-                      color: AppColors.ink,
+                      color: context.dashInk,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -1017,15 +1069,28 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     );
     if (ok != true || !mounted) return;
     final target = _categories.firstWhere((c) => c.id == targetId);
+    final sourceId = source.id;
+    final sourceName = source.name;
     setState(() {
       target.spent += source.spent;
       target.txns += source.txns;
-      _categories.removeWhere((c) => c.id == source.id);
+      _categories.removeWhere((c) => c.id == sourceId);
       for (final r in _rules) {
-        if (r.categoryId == source.id) r.categoryId = target.id;
+        if (r.categoryId == sourceId) r.categoryId = target.id;
       }
     });
-    toast(context, '${source.name} merged into ${target.name}');
+    if (_isPersistedCategoryId(sourceId)) {
+      final removed = await _ctrl?.remove(sourceId) ?? false;
+      if (!mounted) return;
+      if (!removed) {
+        toast(
+          context,
+          '$sourceName merged locally — could not delete source on server',
+        );
+        return;
+      }
+    }
+    toast(context, '$sourceName merged into ${target.name}');
   }
 
   Future<void> _openRules() async {
@@ -1042,7 +1107,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.dashPanel,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1061,18 +1126,18 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Category rules',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
-                        color: AppColors.ink,
+                        color: context.dashInk,
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'Match merchants, memos, amounts, or enable AI auto-label.',
-                      style: TextStyle(color: AppColors.mute, fontSize: 13),
+                      style: TextStyle(color: context.dashMute, fontSize: 13),
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<_RuleMatch>(
@@ -1114,14 +1179,14 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppColors.surface,
+                          color: context.dashSurface,
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.line),
+                          border: Border.all(color: context.dashLine),
                         ),
-                        child: const Text(
+                        child: Text(
                           'AI suggests a label from merchant + memo when nothing else matches.',
                           style: TextStyle(
-                            color: AppColors.mute,
+                            color: context.dashMute,
                             fontSize: 13,
                           ),
                         ),
@@ -1219,10 +1284,10 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     const SizedBox(height: 12),
                     Expanded(
                       child: sorted.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text(
                                 'No rules yet',
-                                style: TextStyle(color: AppColors.mute),
+                                style: TextStyle(color: context.dashMute),
                               ),
                             )
                           : ListView.separated(
@@ -1241,8 +1306,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.w700,
                                       color: r.enabled
-                                          ? AppColors.ink
-                                          : AppColors.mute,
+                                          ? context.dashInk
+                                          : context.dashMute,
                                     ),
                                   ),
                                   subtitle: Text(
@@ -1289,7 +1354,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   Future<void> _rowActions(_CategoryItem item) async {
     final action = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: context.dashPanel,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1298,12 +1363,24 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (item.hidden)
+              if (widget.onOpenCategory != null)
+                ListTile(
+                  title: const Text('View activity'),
+                  onTap: () => Navigator.pop(ctx, 'open'),
+                ),
+              if (item.hidden) ...[
                 ListTile(
                   title: const Text('Restore'),
                   onTap: () => Navigator.pop(ctx, 'hide'),
-                )
-              else ...[
+                ),
+                ListTile(
+                  title: const Text(
+                    'Delete permanently',
+                    style: TextStyle(color: Color(0xFFC53030)),
+                  ),
+                  onTap: () => Navigator.pop(ctx, 'delete'),
+                ),
+              ] else ...[
                 ListTile(
                   title: const Text('Edit'),
                   onTap: () => Navigator.pop(ctx, 'edit'),
@@ -1320,6 +1397,13 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                   title: const Text('Archive'),
                   onTap: () => Navigator.pop(ctx, 'hide'),
                 ),
+                ListTile(
+                  title: const Text(
+                    'Delete permanently',
+                    style: TextStyle(color: Color(0xFFC53030)),
+                  ),
+                  onTap: () => Navigator.pop(ctx, 'delete'),
+                ),
               ],
             ],
           ),
@@ -1327,6 +1411,10 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       },
     );
     if (!mounted || action == null) return;
+    if (action == 'open') {
+      widget.onOpenCategory?.call(item.name);
+      return;
+    }
     if (action == 'edit') {
       await _openEditor(existing: item);
       return;
@@ -1339,9 +1427,60 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       await _merge(item);
       return;
     }
+    if (action == 'delete') {
+      await _deleteCategory(item);
+      return;
+    }
     if (action == 'hide') {
       setState(() => item.hidden = !item.hidden);
       toast(context, item.hidden ? 'Category archived' : 'Category restored');
+    }
+  }
+
+  Future<void> _openMoreMenu({required bool needsImport}) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: context.dashPanel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.folder_outlined),
+                title: const Text('Groups'),
+                onTap: () => Navigator.pop(ctx, 'groups'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.rule_rounded),
+                title: const Text('Rules'),
+                onTap: () => Navigator.pop(ctx, 'rules'),
+              ),
+              if (needsImport)
+                ListTile(
+                  leading: const Icon(Icons.download_outlined),
+                  title: const Text('Import defaults'),
+                  onTap: () => Navigator.pop(ctx, 'import'),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (!mounted || action == null) return;
+    if (action == 'groups') {
+      await _openGroupsManager();
+      return;
+    }
+    if (action == 'rules') {
+      await _openRules();
+      return;
+    }
+    if (action == 'import') {
+      await _importDefaults();
     }
   }
 
@@ -1360,7 +1499,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.dashPanel,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1376,10 +1515,10 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 children: [
                   Text(
                     'Budget · ${item.name}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
-                      color: AppColors.ink,
+                      color: context.dashInk,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -1451,11 +1590,6 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   Widget build(BuildContext context) {
     final activeVisible = _activeVisible;
     final archivedVisible = _archivedVisible;
-    final spendRows = _categories
-        .where((c) => !c.hidden && c.group != 'Income')
-        .toList()
-      ..sort((a, b) => b.spent.compareTo(a.spent));
-    final total = _totalSpend;
     final names = {for (final c in _categories) c.name.toLowerCase()};
     final needsImport =
         _defaults.any((d) => !names.contains(d.name.toLowerCase()));
@@ -1463,73 +1597,101 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     for (final c in activeVisible) {
       grouped.putIfAbsent(c.group, () => []).add(c);
     }
+    final canWrite =
+        SpacesScope.maybeOf(context)?.can('categories', 'write') != false;
+    final budgetTotal = _categories
+        .where((c) => !c.hidden && c.group != 'Income')
+        .fold<double>(0, (s, c) => s + c.budgetFor(_monthKey));
+    final subtitle = _archivedCount > 0
+        ? '$_activeCount active · $_archivedCount archived'
+        : '$_activeCount active';
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        foregroundColor: AppColors.ink,
-        elevation: 0,
-        title: const Text(
-          'Categories',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 28),
-        children: [
-          DashPageHeader(
-            title: 'Categories',
-            subtitle: 'Labels, monthly budgets, and flexible rules',
-            actions: [
-              GhostButton(
-                label: _monthLabel.split(' ').first,
-                onPressed: () async {
-                  final next = await showDatePicker(
-                    context: context,
-                    initialDate: _month,
-                    firstDate: DateTime(2025, 1),
-                    lastDate: DateTime(2027, 12),
-                    helpText: 'Pick a month',
-                  );
-                  if (next != null) {
-                    setState(() => _month = DateTime(next.year, next.month, 1));
-                  }
-                },
-              ),
-              GhostButton(label: 'Groups', onPressed: _openGroupsManager),
-              GhostButton(label: 'Rules', onPressed: _openRules),
-              AccentButton(
-                label: 'New category',
-                onPressed: SpacesScope.maybeOf(context)
-                            ?.can('categories', 'write') ==
-                        false
-                    ? null
-                    : () => _openEditor(),
-              ),
-            ],
+    return dashPullToRefresh(
+      onRefresh: widget.onRefresh ??
+          () async {
+            final ctrl = _ctrl;
+            if (ctrl == null) return;
+            final id = ctrl.spaceId;
+            if (id.isEmpty) return;
+            await ctrl.loadForSpace(id);
+          },
+      backgroundColor: context.dashPanel,
+      child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.only(bottom: 28),
+      children: [
+        DashFeedChrome(
+          title: 'Categories',
+          subtitle: subtitle,
+          onSecondary: () => _openMoreMenu(needsImport: needsImport),
+          secondaryIcon: Icons.tune_rounded,
+          secondaryTooltip: 'More',
+          onPrimary: canWrite ? () => _openEditor() : null,
+          primaryTooltip: 'New category',
+          primaryEnabled: canWrite,
+          metaLine:
+              'Spent ${moneyWhole(_totalSpend)} · Budget ${moneyWhole(budgetTotal)}',
+          filterBar: FilterSortBar(
+            fields: _categoryFilterFields,
+            rules: _filterRules,
+            sorts: _sortRules,
+            selectOptions: _selectOptions,
+            defaultFilterField: 'group',
+            defaultSortField: 'name',
+            search: _query.text,
+            onSearchChanged: (v) {
+              _query.text = v;
+              setState(() {});
+            },
+            searchHint: 'Search categories…',
+            onRulesChanged: (rules) => setState(() => _filterRules = rules),
+            onSortsChanged: (sorts) => setState(() => _sortRules = sorts),
+            iconButtons: true,
+            expandSearch: true,
           ),
-          if (_ctrl?.loading == true)
-            const DashLoadingBody(kpiCount: 4, listRows: 6)
-          else ...[
+        ),
+        if (_ctrl?.loading == true)
+          const DashLoadingBody(kpiCount: 4, listRows: 6)
+        else ...[
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
             child: Row(
               children: [
                 IconButton(
                   onPressed: () => setState(
                     () => _month = DateTime(_month.year, _month.month - 1),
                   ),
-                  icon: const Icon(Icons.chevron_left_rounded),
+                  icon: Icon(
+                    Icons.chevron_left_rounded,
+                    color: context.dashMute,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Previous month',
                 ),
                 Expanded(
-                  child: Text(
-                    _monthLabel,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
+                  child: GestureDetector(
+                    onTap: () async {
+                      final next = await showDatePicker(
+                        context: context,
+                        initialDate: _month,
+                        firstDate: DateTime(2025, 1),
+                        lastDate: DateTime(2027, 12),
+                        helpText: 'Pick a month',
+                      );
+                      if (next != null) {
+                        setState(
+                          () => _month = DateTime(next.year, next.month, 1),
+                        );
+                      }
+                    },
+                    child: Text(
+                      _monthLabel,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: context.dashMute,
+                      ),
                     ),
                   ),
                 ),
@@ -1537,776 +1699,155 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                   onPressed: () => setState(
                     () => _month = DateTime(_month.year, _month.month + 1),
                   ),
-                  icon: const Icon(Icons.chevron_right_rounded),
+                  icon: Icon(
+                    Icons.chevron_right_rounded,
+                    color: context.dashMute,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Next month',
                 ),
               ],
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: FilterSortBar(
-              fields: _categoryFilterFields,
-              rules: _filterRules,
-              sorts: _sortRules,
-              selectOptions: _selectOptions,
-              defaultFilterField: 'group',
-              defaultSortField: 'name',
-              search: _query.text,
-              onSearchChanged: (v) {
-                _query.text = v;
-                setState(() {});
-              },
-              searchHint: 'Search categories…',
-              onRulesChanged: (rules) => setState(() => _filterRules = rules),
-              onSortsChanged: (sorts) => setState(() => _sortRules = sorts),
-              showStats: _showStats,
-              onShowStatsChanged: (v) => setState(() => _showStats = v),
-            ),
-          ),
-          if (_showStats)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: DashKpi(
-                      label: 'Active',
-                      value: _archivedCount > 0
-                          ? '$_activeCount · $_archivedCount archived'
-                          : '$_activeCount',
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: DashKpi(
-                      label: 'Budget',
-                      value: moneyWhole(
-                        _categories
-                            .where((c) => !c.hidden && c.group != 'Income')
-                            .fold<double>(
-                              0,
-                              (s, c) => s + c.budgetFor(_monthKey),
-                            ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: DashKpi(
-                      label: 'Spent',
-                      value: moneyWhole(_totalSpend),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (spendRows.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: DashPanel(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      InkWell(
-                        onTap: () =>
-                            setState(() => _spendMixOpen = !_spendMixOpen),
-                        borderRadius: BorderRadius.circular(8),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        const Text(
-                                          'Spend mix',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.ink,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        AnimatedRotation(
-                                          turns: _spendMixOpen ? 0.5 : 0,
-                                          duration:
-                                              const Duration(milliseconds: 180),
-                                          child: const Icon(
-                                            Icons.expand_more_rounded,
-                                            size: 18,
-                                            color: AppColors.mute,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Share of tagged spend · $_monthLabel',
-                                      style: const TextStyle(
-                                        color: AppColors.mute,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Text(
-                                moneyWhole(total),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.ink,
-                                  fontFeatures: [FontFeature.tabularFigures()],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(999),
-                          child: SizedBox(
-                            height: 10,
-                            child: Row(
-                              children: [
-                                for (final c in spendRows)
-                                  if (total > 0 && c.spent / total >= 0.004)
-                                    Expanded(
-                                      flex: (c.spent / total * 1000)
-                                          .round()
-                                          .clamp(1, 1000),
-                                      child: Tooltip(
-                                        message:
-                                            '${c.name} · ${((c.spent / total) * 100).round()}%',
-                                        child: ColoredBox(color: c.color),
-                                      ),
-                                    ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (_spendMixOpen) ...[
-                        const SizedBox(height: 12),
-                        for (final c in spendRows)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-                            child: Row(
-                              children: [
-                                Text(c.emoji,
-                                    style: const TextStyle(fontSize: 14)),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    c.name,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  total > 0
-                                      ? '${((c.spent / total) * 100).round()}%'
-                                      : '0%',
-                                  style: const TextStyle(
-                                    color: AppColors.mute,
-                                    fontSize: 12,
-                                    fontFeatures: [
-                                      FontFeature.tabularFigures(),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: DashPanel(
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            child: activeVisible.isEmpty && archivedVisible.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 24, 0, 28),
                     child: Column(
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                initialValue: _groupFilter,
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  border: OutlineInputBorder(),
-                                ),
-                                items: [
-                                  const DropdownMenuItem(
-                                    value: 'all',
-                                    child: Text('All groups'),
-                                  ),
-                                  for (final g in _allGroups)
-                                    DropdownMenuItem(
-                                      value: g,
-                                      child: Text(g),
-                                    ),
-                                ],
-                                onChanged: (v) =>
-                                    setState(() => _groupFilter = v ?? 'all'),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              decoration: BoxDecoration(
-                                border: Border.all(color: AppColors.line),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _ViewToggle(
-                                    icon: Icons.grid_view_rounded,
-                                    selected: _gridView,
-                                    onTap: () =>
-                                        setState(() => _gridView = true),
-                                  ),
-                                  _ViewToggle(
-                                    icon: Icons.view_list_rounded,
-                                    selected: !_gridView,
-                                    onTap: () =>
-                                        setState(() => _gridView = false),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (needsImport) ...[
-                              const SizedBox(width: 8),
-                              LinkAction(
-                                label: 'Import',
-                                onTap: _importDefaults,
-                              ),
-                            ],
-                          ],
+                        Text(
+                          _categories.isEmpty
+                              ? 'No categories yet'
+                              : 'No categories match',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: context.dashMute,
+                          ),
                         ),
+                        const SizedBox(height: 12),
+                        if (_categories.isEmpty)
+                          needsImport
+                              ? AccentButton(
+                                  label: 'Import defaults',
+                                  onPressed: canWrite ? _importDefaults : null,
+                                )
+                              : GhostButton(
+                                  label: 'New category',
+                                  onPressed:
+                                      canWrite ? () => _openEditor() : null,
+                                )
+                        else
+                          GhostButton(
+                            label: 'Clear filters',
+                            onPressed: () => setState(() {
+                              _query.clear();
+                              _groupFilter = 'all';
+                              _filterRules = [];
+                              _sortRules = [];
+                            }),
+                          ),
                       ],
                     ),
-                  ),
-                  if (activeVisible.isEmpty && archivedVisible.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                      child: Column(
-                        children: [
-                          Text(
-                            _categories.isEmpty
-                                ? 'No categories yet'
-                                : 'No categories match',
-                            style: const TextStyle(
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final entry in grouped.entries) ...[
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(0, 14, 0, 6),
+                          child: Text(
+                            entry.key,
+                            style: TextStyle(
+                              color: context.dashMute,
+                              fontSize: 12,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.ink,
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          if (_categories.isEmpty)
-                            needsImport
-                                ? AccentButton(
-                                    label: 'Import defaults',
-                                    onPressed: SpacesScope.maybeOf(context)
-                                                ?.can('categories', 'write') ==
-                                            false
-                                        ? null
-                                        : _importDefaults,
-                                  )
-                                : GhostButton(
-                                    label: 'New category',
-                                    onPressed: SpacesScope.maybeOf(context)
-                                                ?.can('categories', 'write') ==
-                                            false
-                                        ? null
-                                        : () => _openEditor(),
-                                  )
-                          else
-                            GhostButton(
-                              label: 'Clear filters',
-                              onPressed: () => setState(() {
-                                _query.clear();
-                                _groupFilter = 'all';
-                                _filterRules = [];
-                                _sortRules = [];
-                              }),
-                            ),
-                        ],
-                      ),
-                    )
-                  else ...[
-                    for (final entry in grouped.entries) ...[
-                      Container(
-                        width: double.infinity,
-                        color: AppColors.surface,
-                        padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                entry.key.toUpperCase(),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.6,
-                                  color: AppColors.mute,
-                                ),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () async {
-                                final next = await _promptGroupName(
-                                  context,
-                                  initial: entry.key,
-                                );
-                                if (next == null) return;
-                                _renameGroup(entry.key, next);
-                              },
-                              child: const Text('Edit'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (_gridView)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final cols = constraints.maxWidth > 520 ? 3 : 2;
-                              return GridView.builder(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: entry.value.length,
-                                gridDelegate:
-                                    SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: cols,
-                                  mainAxisSpacing: 10,
-                                  crossAxisSpacing: 10,
-                                  childAspectRatio: 1.15,
-                                ),
-                                itemBuilder: (_, i) {
-                                  final item = entry.value[i];
-                                  return _CategoryTile(
-                                    item: item,
-                                    monthKey: _monthKey,
-                                    ruleCount: _rules
-                                        .where((r) => r.categoryId == item.id)
-                                        .length,
-                                    share: total > 0 && item.group != 'Income'
-                                        ? (item.spent / total * 100).round()
-                                        : null,
-                                    showDivider: false,
-                                    grid: true,
-                                    onOpen: () => widget.onOpenCategory?.call(item.name),
-                                    onEdit: () => _rowActions(item),
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                        )
-                      else
-                        for (var i = 0; i < entry.value.length; i++)
-                          _CategoryTile(
-                            item: entry.value[i],
-                            monthKey: _monthKey,
-                            ruleCount: _rules
-                                .where((r) => r.categoryId == entry.value[i].id)
-                                .length,
-                            share: total > 0 && entry.value[i].group != 'Income'
-                                ? (entry.value[i].spent / total * 100).round()
-                                : null,
-                            showDivider: i < entry.value.length - 1,
-                            grid: false,
-                            onOpen: () => widget.onOpenCategory
-                                ?.call(entry.value[i].name),
-                            onEdit: () => _rowActions(entry.value[i]),
-                          ),
-                    ],
-                    if (archivedVisible.isNotEmpty) ...[
-                      Container(
-                        width: double.infinity,
-                        color: AppColors.surface,
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                        child: const Text(
-                          'ARCHIVED',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.6,
-                            color: AppColors.mute,
                           ),
                         ),
-                      ),
-                      if (_gridView)
+                        for (final item in entry.value)
+                          _CategoryRow(
+                            item: item,
+                            onTap: () => _rowActions(item),
+                          ),
+                      ],
+                      if (archivedVisible.isNotEmpty) ...[
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final cols = constraints.maxWidth > 520 ? 3 : 2;
-                              return GridView.builder(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: archivedVisible.length,
-                                gridDelegate:
-                                    SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: cols,
-                                  mainAxisSpacing: 10,
-                                  crossAxisSpacing: 10,
-                                  childAspectRatio: 1.15,
-                                ),
-                                itemBuilder: (_, i) {
-                                  final item = archivedVisible[i];
-                                  return _CategoryTile(
-                                    item: item,
-                                    monthKey: _monthKey,
-                                    ruleCount: _rules
-                                        .where((r) => r.categoryId == item.id)
-                                        .length,
-                                    share: total > 0 && item.group != 'Income'
-                                        ? (item.spent / total * 100).round()
-                                        : null,
-                                    showDivider: false,
-                                    grid: true,
-                                    onOpen: () => widget.onOpenCategory?.call(item.name),
-                                    onEdit: () => _rowActions(item),
-                                  );
-                                },
-                              );
-                            },
+                          padding: const EdgeInsets.fromLTRB(0, 14, 0, 6),
+                          child: Text(
+                            'Archived',
+                            style: TextStyle(
+                              color: context.dashMute,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        )
-                      else
-                        for (var i = 0; i < archivedVisible.length; i++)
-                          _CategoryTile(
-                            item: archivedVisible[i],
-                            monthKey: _monthKey,
-                            ruleCount: _rules
-                                .where(
-                                  (r) =>
-                                      r.categoryId == archivedVisible[i].id,
-                                )
-                                .length,
-                            share: total > 0 &&
-                                    archivedVisible[i].group != 'Income'
-                                ? (archivedVisible[i].spent / total * 100)
-                                    .round()
-                                : null,
-                            showDivider: i < archivedVisible.length - 1,
-                            grid: false,
-                            onOpen: () => widget.onOpenCategory?.call(archivedVisible[i].name),
-                            onEdit: () => _rowActions(archivedVisible[i]),
+                        ),
+                        for (final item in archivedVisible)
+                          _CategoryRow(
+                            item: item,
+                            onTap: () => _rowActions(item),
                           ),
+                      ],
                     ],
-                  ],
-                ],
-              ),
-            ),
+                  ),
           ),
-          ],
         ],
-      ),
+      ],
+    ),
     );
   }
 }
 
-class _ViewToggle extends StatelessWidget {
-  const _ViewToggle({
-    required this.icon,
-    required this.selected,
+class _CategoryRow extends StatelessWidget {
+  const _CategoryRow({
+    required this.item,
     required this.onTap,
   });
 
-  final IconData icon;
-  final bool selected;
+  final _CategoryItem item;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: selected ? AppColors.ink : Colors.transparent,
-      borderRadius: BorderRadius.circular(7),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(7),
-        child: SizedBox(
-          width: 32,
-          height: 32,
-          child: Icon(
-            icon,
-            size: 16,
-            color: selected ? Colors.white : AppColors.mute,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CategoryTile extends StatelessWidget {
-  const _CategoryTile({
-    required this.item,
-    required this.monthKey,
-    required this.ruleCount,
-    required this.share,
-    required this.showDivider,
-    required this.onEdit,
-    this.onOpen,
-    this.grid = false,
-  });
-
-  final _CategoryItem item;
-  final String monthKey;
-  final int ruleCount;
-  final int? share;
-  final bool showDivider;
-  final bool grid;
-  final VoidCallback onEdit;
-  final VoidCallback? onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final budget = item.budgetFor(monthKey);
-    final meta = [
-      '${item.txns} txns',
-      if (ruleCount > 0) '$ruleCount rules',
-      if (share != null) '$share%',
-    ].join(' · ');
-    final over = budget > 0 && item.spent > budget;
-    final pct = budget > 0
-        ? ((item.spent / budget) * 100).round().clamp(0, 100)
-        : 0;
-
-    final progress = budget > 0
-        ? Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                value: pct / 100,
-                minHeight: 4,
-                backgroundColor: AppColors.surface,
-                color: over ? const Color(0xFFC53030) : item.color,
+    return Opacity(
+      opacity: item.hidden ? 0.55 : 1,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: context.dashLine),
               ),
             ),
-          )
-        : const SizedBox.shrink();
-
-    if (grid) {
-      return Opacity(
-        opacity: item.hidden ? 0.6 : 1,
-        child: Material(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          child: InkWell(
-            onTap: onOpen,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColors.line),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          item.emoji,
-                          style: const TextStyle(fontSize: 18),
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: onEdit,
-                        visualDensity: VisualDensity.compact,
-                        icon: const Icon(Icons.more_horiz_rounded, size: 18),
-                        color: AppColors.mute,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
                     item.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.ink,
-                      fontWeight: FontWeight.w700,
+                    style: TextStyle(
+                      color: context.dashInk,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    meta,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.mute,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    budget > 0
-                        ? '${moneyWhole(item.spent)} / ${moneyWhole(budget)}'
-                        : moneyWhole(item.spent),
-                    style: const TextStyle(
-                      color: AppColors.ink,
-                      fontWeight: FontWeight.w800,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                  progress,
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Opacity(
-      opacity: item.hidden ? 0.6 : 1,
-      child: Material(
-        color: Colors.white,
-        child: InkWell(
-          onTap: onOpen,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-            decoration: BoxDecoration(
-              border: showDivider
-                  ? const Border(bottom: BorderSide(color: AppColors.line))
-                  : null,
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(item.emoji, style: const TextStyle(fontSize: 18)),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  item.name,
-                                  style: const TextStyle(
-                                    color: AppColors.ink,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                              if (item.hidden) ...[
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surface,
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                  child: const Text(
-                                    'Archived',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.mute,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            [
-                              '${item.txns} transactions',
-                              if (ruleCount > 0) '$ruleCount rules',
-                              if (share != null) '$share% of spend',
-                            ].join(' · '),
-                            style: const TextStyle(
-                              color: AppColors.mute,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          budget > 0
-                              ? '${moneyWhole(item.spent)} / ${moneyWhole(budget)}'
-                              : moneyWhole(item.spent),
-                          style: const TextStyle(
-                            color: AppColors.ink,
-                            fontWeight: FontWeight.w800,
-                            fontFeatures: [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                        Text(
-                          budget <= 0
-                              ? 'No budget'
-                              : item.monthlyBudgets.containsKey(monthKey)
-                                  ? 'Month override'
-                                  : 'General budget',
-                          style: const TextStyle(
-                            color: AppColors.mute,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    IconButton(
-                      onPressed: onEdit,
-                      icon: const Icon(Icons.more_horiz_rounded, size: 20),
-                      color: AppColors.mute,
-                    ),
-                  ],
                 ),
-                progress,
+                const SizedBox(width: 10),
+                Text(
+                  moneyWhole(item.spent),
+                  style: TextStyle(
+                    color: context.dashInk,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
               ],
             ),
           ),

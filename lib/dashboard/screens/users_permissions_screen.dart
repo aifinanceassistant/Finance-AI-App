@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 
 import '../../spaces/permissions.dart';
 import '../../theme/app_theme.dart';
+import '../dash_colors.dart';
 import '../dash_sheets.dart';
 import '../form_validation.dart';
+import '../shimmer.dart';
 import '../spaces.dart';
 import '../spaces_scope.dart';
 import '../ui.dart';
@@ -106,9 +108,9 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
+              Text(
                 'Share this invite token with the member:',
-                style: TextStyle(color: AppColors.mute, fontSize: 13),
+                style: TextStyle(color: context.dashMute, fontSize: 13),
               ),
               const SizedBox(height: 10),
               SelectableText(
@@ -314,14 +316,7 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> {
     final spaces = _spaces;
     final yourRole = spaces.access?.role ?? spaces.space.role ?? 'viewer';
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'Users & permissions',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+    return DashModalScaffold(
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -345,8 +340,8 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 child: _loading
                     ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 28),
-                        child: Center(child: CircularProgressIndicator()),
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: ListShimmer(rows: 4),
                       )
                     : _error != null
                         ? Padding(
@@ -354,7 +349,7 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> {
                             child: Text(
                               _error!,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(color: AppColors.mute),
+                              style: TextStyle(color: context.dashMute),
                             ),
                           )
                         : _members.isEmpty
@@ -366,8 +361,8 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> {
                                       ? 'No members yet. Invite someone on Plus or Family.'
                                       : 'You don’t have permission to view members.',
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: AppColors.mute,
+                                  style: TextStyle(
+                                    color: context.dashMute,
                                     fontSize: 13,
                                   ),
                                 ),
@@ -405,10 +400,10 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      const Text(
+                      Text(
                         'Upgrade to collaborate with roles and permissions.',
                         style: TextStyle(
-                          color: AppColors.mute,
+                          color: context.dashMute,
                           fontSize: 13,
                         ),
                       ),
@@ -457,7 +452,7 @@ class _MemberTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
         border: showDivider
-            ? const Border(bottom: BorderSide(color: AppColors.line))
+            ? Border(bottom: BorderSide(color: context.dashLine))
             : null,
       ),
       child: Row(
@@ -470,18 +465,18 @@ class _MemberTile extends StatelessWidget {
                   member.name?.isNotEmpty == true
                       ? member.name!
                       : member.email,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
-                    color: AppColors.ink,
+                    color: context.dashInk,
                   ),
                 ),
                 if (member.name?.isNotEmpty == true) ...[
                   const SizedBox(height: 2),
                   Text(
                     member.email,
-                    style: const TextStyle(
-                      color: AppColors.mute,
+                    style: TextStyle(
+                      color: context.dashMute,
                       fontSize: 12,
                     ),
                   ),
@@ -489,8 +484,8 @@ class _MemberTile extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   '${member.role} · ${member.status}',
-                  style: const TextStyle(
-                    color: AppColors.softMute,
+                  style: TextStyle(
+                    color: context.dashSoftMute,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -548,13 +543,13 @@ class _PermissionMatrix extends StatelessWidget {
         ],
         Container(
           decoration: BoxDecoration(
-            border: Border.all(color: AppColors.line),
+            border: Border.all(color: context.dashLine),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Column(
             children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Row(
                   children: [
                     Expanded(
@@ -563,7 +558,7 @@ class _PermissionMatrix extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.mute,
+                          color: context.dashMute,
                         ),
                       ),
                     ),
@@ -575,7 +570,7 @@ class _PermissionMatrix extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.mute,
+                          color: context.dashMute,
                         ),
                       ),
                     ),
@@ -587,14 +582,14 @@ class _PermissionMatrix extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.mute,
+                          color: context.dashMute,
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const Divider(height: 1, color: AppColors.line),
+              Divider(height: 1, color: context.dashLine),
               for (final area in kSpaceAreas)
                 Padding(
                   padding:

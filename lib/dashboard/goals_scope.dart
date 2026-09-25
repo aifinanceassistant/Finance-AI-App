@@ -15,6 +15,10 @@ class GoalsScope extends InheritedNotifier<GoalsController> {
     return scope!.notifier!;
   }
 
+  static GoalsController? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<GoalsScope>()?.notifier;
+  }
+
   static GoalsController read(BuildContext context) {
     final scope = context.getInheritedWidgetOfExactType<GoalsScope>();
     assert(scope != null, 'GoalsScope not found');

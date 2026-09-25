@@ -22,7 +22,7 @@ class AccountsController extends ChangeNotifier {
 
   List<DemoAccount> _accounts = [];
   String _spaceId = '';
-  bool _loading = false;
+  bool _loading = true;
 
   List<DemoAccount> get accounts => List.unmodifiable(_accounts);
   bool get loading => _loading;

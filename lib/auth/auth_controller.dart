@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'app_env.dart';
 import '../billing/entitlements.dart';
@@ -18,6 +19,7 @@ class AuthUser {
     required this.email,
     this.name,
     this.onboardingCompleted = false,
+    this.onboardingKnown = true,
     this.currency = 'USD',
     this.role = 'user',
     this.subscriptionActive = false,
@@ -28,6 +30,10 @@ class AuthUser {
   final String email;
   final String? name;
   final bool onboardingCompleted;
+
+  /// False while [onboardingCompleted] is only a default (profile not yet
+  /// fetched and nothing cached) — routing waits instead of showing onboarding.
+  final bool onboardingKnown;
   final String currency;
   final String role;
   final bool subscriptionActive;
@@ -44,6 +50,7 @@ class AuthUser {
     String? email,
     String? name,
     bool? onboardingCompleted,
+    bool? onboardingKnown,
     String? currency,
     String? role,
     bool? subscriptionActive,
@@ -54,6 +61,7 @@ class AuthUser {
       email: email ?? this.email,
       name: name ?? this.name,
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+      onboardingKnown: onboardingKnown ?? this.onboardingKnown,
       currency: currency ?? this.currency,
       role: role ?? this.role,
       subscriptionActive: subscriptionActive ?? this.subscriptionActive,
@@ -63,6 +71,7 @@ class AuthUser {
 }
 
 const _rememberKey = 'financeai_remember_me';
+const _onboardedKeyPrefix = 'financeai_onboarded_';
 
 /// App-wide auth. Use [AuthController.supabase] in production and
 /// [AuthController.fake] in widget tests.
@@ -89,13 +98,46 @@ class AuthController extends ChangeNotifier {
   bool _loading = true;
   bool _ready = false;
   bool _needsPasswordReset = false;
+  bool _postAuthNavStarted = false;
+  bool _closingAuthBrowser = false;
   StreamSubscription<AuthState>? _sub;
+  /// Drops overlapping [_applyUser] results from token-refresh races.
+  var _applyGeneration = 0;
 
   AuthUser? get user => _user;
   bool get loading => _loading;
   bool get ready => _ready;
   bool get isSignedIn => _user != null;
   bool get needsPasswordReset => _needsPasswordReset;
+
+  /// Signed in but onboarding status not resolved yet — show a loader.
+  bool get profilePending =>
+      _user != null && !_user!.onboardingKnown && !_needsPasswordReset;
+
+  /// Completes once [profilePending] is false (retries end within ~30s).
+  Future<void> waitForProfile() {
+    if (!profilePending) return Future.value();
+    final done = Completer<void>();
+    void check() {
+      if (!profilePending && !done.isCompleted) {
+        removeListener(check);
+        done.complete();
+      }
+    }
+
+    addListener(check);
+    return done.future;
+  }
+
+  Future<bool?> _readOnboardedCache(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('$_onboardedKeyPrefix$userId');
+  }
+
+  Future<void> _writeOnboardedCache(String userId, bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('$_onboardedKeyPrefix$userId', value);
+  }
 
   SupabaseClient? get _client {
     if (isFake || !AppEnv.isSupabaseConfigured) return null;
@@ -155,6 +197,7 @@ class AuthController extends ChangeNotifier {
 
       if (event == AuthChangeEvent.passwordRecovery) {
         _needsPasswordReset = true;
+        unawaited(closeAuthBrowser());
         if (u != null) {
           await _applyUser(u);
         } else {
@@ -166,13 +209,13 @@ class AuthController extends ChangeNotifier {
       if (u == null) {
         _user = null;
         _needsPasswordReset = false;
+        _postAuthNavStarted = false;
         notifyListeners();
         return;
       }
 
-      if (event == AuthChangeEvent.signedIn) {
-        unawaited(syncProfile());
-      }
+      // Dismiss OAuth sheet as soon as the session exists (before profile fetch).
+      unawaited(closeAuthBrowser());
       await _applyUser(u);
     });
 
@@ -187,6 +230,28 @@ class AuthController extends ChangeNotifier {
     super.dispose();
   }
 
+  /// Dismisses SFSafariViewController / Custom Tabs after OAuth redirect.
+  Future<void> closeAuthBrowser() async {
+    if (_closingAuthBrowser) return;
+    _closingAuthBrowser = true;
+    try {
+      if (await supportsCloseForLaunchMode(LaunchMode.inAppBrowserView)) {
+        await closeInAppWebView();
+      }
+    } catch (_) {
+      // No open in-app browser, or platform doesn't support close.
+    } finally {
+      _closingAuthBrowser = false;
+    }
+  }
+
+  /// Returns true the first time post-auth navigation should run.
+  bool beginPostAuthNavigation() {
+    if (_postAuthNavStarted) return false;
+    _postAuthNavStarted = true;
+    return true;
+  }
+
   Future<void> _applyUser(User sbUser) async {
     final email = sbUser.email;
     if (email == null || email.isEmpty) {
@@ -194,25 +259,69 @@ class AuthController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+
+    final gen = ++_applyGeneration;
+    final previous =
+        _user?.id == sbUser.id && _user!.onboardingKnown ? _user : null;
+    final cached =
+        previous == null ? await _readOnboardedCache(sbUser.id) : null;
     final meta = sbUser.userMetadata ?? {};
+    // Seed from the in-memory user, else the on-device cache, so a failed
+    // profile fetch (e.g. network still waking after resume) can't route a
+    // finished user to onboarding.
     var mapped = AuthUser(
       id: sbUser.id,
       email: email,
-      name: (meta['full_name'] as String?) ?? (meta['name'] as String?),
+      name: (meta['full_name'] as String?) ??
+          (meta['name'] as String?) ??
+          previous?.name,
+      onboardingCompleted:
+          previous?.onboardingCompleted ?? cached ?? false,
+      onboardingKnown: previous != null || cached != null,
+      currency: previous?.currency ?? 'USD',
+      role: previous?.role ?? 'user',
+      subscriptionActive: previous?.subscriptionActive ?? false,
+      entitlements: previous?.entitlements,
     );
     mapped = await _mergeProfile(mapped);
+    if (gen != _applyGeneration) return;
     _user = mapped;
+    notifyListeners();
+    if (!mapped.onboardingKnown) {
+      unawaited(_retryProfile(gen));
+    }
+  }
+
+  /// Backoff retries while onboarding status is unknown (loader is showing).
+  Future<void> _retryProfile(int gen) async {
+    for (final seconds in const [1, 2, 4, 8, 15]) {
+      await Future<void>.delayed(Duration(seconds: seconds));
+      final current = _user;
+      if (gen != _applyGeneration || current == null) return;
+      if (current.onboardingKnown) return;
+      final merged = await _mergeProfile(current);
+      if (gen != _applyGeneration) return;
+      if (merged.onboardingKnown) {
+        _user = merged;
+        notifyListeners();
+        return;
+      }
+    }
+    // Give up waiting: fall back to the default rather than spin forever.
+    if (gen != _applyGeneration || _user == null) return;
+    _user = _user!.copyWith(onboardingKnown: true);
     notifyListeners();
   }
 
   Future<AuthUser> _mergeProfile(AuthUser base) async {
     try {
       final data = await _apiJson('GET', '/api/profile');
+      // Keep prior session fields when the request fails / 401s mid-refresh.
       if (data == null) return base;
       final currency =
           ((data['currency'] as String?)?.trim().isNotEmpty ?? false)
               ? (data['currency'] as String).trim().toUpperCase()
-              : 'USD';
+              : base.currency;
       DisplayCurrency.setCode(currency);
       // ignore: discarded_futures
       _refreshDisplayFx(currency);
@@ -228,11 +337,20 @@ class AuthController extends ChangeNotifier {
           data['subscription_active'] == true ||
           (entitlements?.isSubscribed ?? false);
 
+      // Once onboarding is known complete for this session, don't regress on
+      // a transient profile payload that omits the timestamp.
+      final onboardedFromApi = data['onboarding_completed_at'] != null;
+      final onboardingCompleted =
+          onboardedFromApi || base.onboardingCompleted;
+      // ignore: discarded_futures
+      _writeOnboardedCache(base.id, onboardingCompleted);
+
       return AuthUser(
         id: base.id,
         email: (data['email'] as String?) ?? base.email,
         name: (data['full_name'] as String?) ?? base.name,
-        onboardingCompleted: data['onboarding_completed_at'] != null,
+        onboardingCompleted: onboardingCompleted,
+        onboardingKnown: true,
         currency: currency,
         role: role,
         subscriptionActive: subscriptionActive,
@@ -345,7 +463,8 @@ class AuthController extends ChangeNotifier {
     }
     await _apiJson('PATCH', '/api/profile', body: {'onboarding_completed': true});
     if (_user != null) {
-      _user = _user!.copyWith(onboardingCompleted: true);
+      _user = _user!.copyWith(onboardingCompleted: true, onboardingKnown: true);
+      await _writeOnboardedCache(_user!.id, true);
       notifyListeners();
     }
   }
@@ -524,7 +643,9 @@ class AuthController extends ChangeNotifier {
       await client.auth.signInWithOAuth(
         provider,
         redirectTo: AppEnv.mobileAuthRedirect,
-        authScreenLaunchMode: LaunchMode.externalApplication,
+        // SFSafariViewController (iOS) / Chrome Custom Tabs (Android).
+        // Google on Android is forced external by supabase_flutter.
+        authScreenLaunchMode: LaunchMode.inAppBrowserView,
       );
       return null;
     } on AuthException catch (e) {
@@ -538,6 +659,7 @@ class AuthController extends ChangeNotifier {
     if (isFake) {
       _user = null;
       _needsPasswordReset = false;
+      _postAuthNavStarted = false;
       notifyListeners();
       return;
     }
@@ -546,6 +668,7 @@ class AuthController extends ChangeNotifier {
     } catch (_) {}
     _user = null;
     _needsPasswordReset = false;
+    _postAuthNavStarted = false;
     notifyListeners();
   }
 }
