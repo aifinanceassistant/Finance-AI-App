@@ -5,13 +5,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'auth/app_env.dart';
 import 'auth/auth_controller.dart';
+import 'auth/auth_navigation.dart';
 import 'auth/auth_scope.dart';
-import 'dashboard/shell.dart';
 import 'dashboard/shimmer.dart';
 import 'locale/locale_controller.dart';
-import 'onboarding/onboarding_flow.dart';
-import 'screens/auth/reset_password_screen.dart';
-import 'screens/landing_screen.dart';
 import 'theme/app_theme.dart';
 import 'variations/models.dart';
 
@@ -114,12 +111,7 @@ class _FinanceAiAppState extends State<FinanceAiApp> {
         ),
       );
     }
-    return switch (_auth.destinationForSession()) {
-      AuthDestination.resetPassword => const ResetPasswordScreen(),
-      AuthDestination.dashboard => const DashboardShell(),
-      AuthDestination.onboarding => const OnboardingFlow(),
-      AuthDestination.landing => const LandingScreen(),
-    };
+    return pageForDestination(_auth.destinationForSession());
   }
 
   @override

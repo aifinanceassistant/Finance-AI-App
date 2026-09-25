@@ -16,10 +16,7 @@ class AppEnv {
     // flutter_dotenv keeps the *first* value for duplicate keys, so the
     // override file must be listed in [overrideWithFiles] (not mergeWith).
     try {
-      await dotenv.load(
-        fileName: 'env.example',
-        overrideWithFiles: [override],
-      );
+      await dotenv.load(fileName: 'env.example', overrideWithFiles: [override]);
       // ignore: avoid_print
       print('AppEnv: loaded $override');
     } catch (e) {
@@ -35,9 +32,7 @@ class AppEnv {
 
     if (!isSupabaseConfigured) {
       // ignore: avoid_print
-      print(
-        'AppEnv: Supabase not configured. Edit $override and rebuild.',
-      );
+      print('AppEnv: Supabase not configured. Edit $override and rebuild.');
     }
   }
 

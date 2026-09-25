@@ -127,7 +127,7 @@ void main() {
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Protect'), findsWidgets);
+    expect(find.text('PROTECT YOUR LOGIN'), findsOneWidget);
   });
 
   testWidgets('Login opens dashboard home', (tester) async {

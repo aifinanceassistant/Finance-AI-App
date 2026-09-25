@@ -17,6 +17,7 @@ dependencies:
   shared_preferences: ^2.5.5
   plaid_flutter: ^5.2.1
   google_fonts: ^8.2.1
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:

@@ -9,19 +9,25 @@ import '../onboarding_dialogs.dart';
 import '../onboarding_layout.dart';
 import '../onboarding_shell.dart';
 
-const _validCodes = {'FRIEND', 'WELCOME', 'FINANCEAI', 'PLUS2026'};
-const _referralDiscount = 0.2;
+/// Mirrors `TRIAL_DAYS` in the web app's `lib/billing/plans.ts`.
+const _trialDays = 14;
+
+typedef _Promo = ({
+  String code,
+  bool valid,
+  double? percentOff,
+  int? amountOff,
+  String? currency,
+});
 
 const _reviews = [
   (
     title: 'Simply the best',
-    body:
-        'This is by far the best budgeting app I have ever used, and I’ve tried a lot of them.',
+    body: 'This is by far the best budgeting app I have ever used, and I’ve tried a lot of them.',
   ),
   (
     title: 'Finally clear',
-    body:
-        'Net worth, budgets, and transfers all make sense now. I check it every morning.',
+    body: 'Net worth, budgets, and transfers all make sense now. I check it every morning.',
   ),
   (
     title: 'Worth every cent',
@@ -52,11 +58,14 @@ class _SubscribeStepState extends State<SubscribeStep> {
   String? _checkoutError;
   int _review = 0;
   Timer? _reviewTimer;
+  Timer? _promoTimer;
+  _Promo? _promo;
+  String _lastReferral = '';
 
   @override
   void initState() {
     super.initState();
-    _referral.addListener(() => setState(() {}));
+    _referral.addListener(_onReferralChanged);
     _reviewTimer = Timer.periodic(const Duration(milliseconds: 4500), (_) {
       if (!mounted) return;
       setState(() => _review = (_review + 1) % _reviews.length);
@@ -66,6 +75,7 @@ class _SubscribeStepState extends State<SubscribeStep> {
   @override
   void dispose() {
     _reviewTimer?.cancel();
+    _promoTimer?.cancel();
     _referral.dispose();
     super.dispose();
   }
@@ -73,54 +83,116 @@ class _SubscribeStepState extends State<SubscribeStep> {
   String get _referralNormalized =>
       _referral.text.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '');
 
-  bool get _referralAccepted =>
-      _referralNormalized.isNotEmpty && _validCodes.contains(_referralNormalized);
+  void _onReferralChanged() {
+    final code = _referralNormalized;
+    if (code == _lastReferral) return;
+    _lastReferral = code;
+    _promoTimer?.cancel();
+    setState(() {});
+    if (code.length < 3) return;
+    _promoTimer = Timer(const Duration(milliseconds: 450), () async {
+      final res = await checkPromotionCode(AuthScope.read(context), code);
+      if (!mounted) return;
+      setState(() {
+        _promo = (
+          code: code,
+          valid: res.valid,
+          percentOff: res.percentOff,
+          amountOff: res.amountOff,
+          currency: res.currency,
+        );
+      });
+    });
+  }
+
+  _Promo? get _promoForCode =>
+      _promo?.code == _referralNormalized ? _promo : null;
+
+  bool get _promoChecking =>
+      _referralNormalized.length >= 3 && _promoForCode == null;
+
+  bool get _referralAccepted => _promoForCode?.valid ?? false;
 
   bool get _referralInvalid =>
-      _referralNormalized.length >= 4 && !_validCodes.contains(_referralNormalized);
+      _referralNormalized.length >= 3 &&
+      _promoForCode != null &&
+      !_promoForCode!.valid;
+
+  String get _discountLabel {
+    final p = _promoForCode;
+    if (p == null || !p.valid) return '';
+    if (p.percentOff != null) {
+      final pct = p.percentOff!;
+      return '${pct % 1 == 0 ? pct.toInt() : pct}% off';
+    }
+    if (p.amountOff != null) return '${_money(p.amountOff! / 100)} off';
+    return 'Discount';
+  }
+
+  double _discounted(double base) {
+    final p = _promoForCode;
+    if (p == null || !p.valid) return base;
+    if (p.percentOff != null) {
+      return (base * (1 - p.percentOff! / 100) * 100).round() / 100;
+    }
+    final usd = p.currency == null || p.currency!.toLowerCase() == 'usd';
+    if (p.amountOff != null && usd) {
+      final v = ((base - p.amountOff! / 100) * 100).round() / 100;
+      return v < 0 ? 0 : v;
+    }
+    return base;
+  }
 
   double get _basePrice => _billing == 'yearly' ? 49.9 : 4.99;
 
-  double get _chargedPrice {
-    if (!_referralAccepted) return _basePrice;
-    return (_basePrice * (1 - _referralDiscount) * 100).round() / 100;
-  }
+  double get _chargedPrice => _discounted(_basePrice);
 
   String _money(num n) {
     final fixed = n % 1 == 0 ? n.toInt().toString() : n.toStringAsFixed(2);
     return '\$$fixed';
   }
 
+  String get _planId => _billing == 'yearly' ? 'plus-yearly' : 'plus-monthly';
+
   Future<void> _startTrial() async {
+    if (_promoChecking) return;
+    if (_referralNormalized.isNotEmpty && !_referralAccepted) {
+      setState(
+        () => _checkoutError =
+            'Remove the referral code or enter a valid one to continue.',
+      );
+      return;
+    }
     setState(() {
       _busy = true;
       _checkoutError = null;
     });
     final auth = AuthScope.read(context);
-    await auth.completeOnboarding();
-    final err = await startStripeCheckout(
+    final referral = _referralAccepted ? _referralNormalized : '';
+    final res = await startStripeCheckoutDetailed(
       auth,
       billing: _billing,
       plan: 'team',
+      promotionCode: referral,
     );
     if (!mounted) return;
     setState(() => _busy = false);
-    if (err != null) {
-      setState(() => _checkoutError = err);
+    if (res.code == 'already_subscribed' || res.code == 'admin_exempt') {
+      widget.onContinue(_planId, referral);
       return;
     }
-    widget.onContinue(
-      _billing == 'yearly' ? 'plus-yearly' : 'plus-monthly',
-      _referralAccepted ? _referralNormalized : '',
-    );
+    if (res.error != null) {
+      setState(() => _checkoutError = res.error);
+      return;
+    }
+    widget.onContinue(_planId, referral);
   }
 
   Future<void> _confirmSkip() async {
     final ok = await showOnboardingConfirm(
       context,
       title: 'Skip for now',
-      body:
-          'You’ll have a day to add a payment method and start your free trial. After that, new data won’t sync.',
+      body: 'You can start your free trial any time from Settings → Billing. Some features stay locked until you subscribe.',
       confirmLabel: 'Sounds good',
     );
     if (ok) widget.onSkip();
@@ -128,12 +200,10 @@ class _SubscribeStepState extends State<SubscribeStep> {
 
   @override
   Widget build(BuildContext context) {
-    final yearlyCharged = _referralAccepted
-        ? (49.9 * (1 - _referralDiscount) * 100).round() / 100
-        : 49.9;
+    final yearlyCharged = _discounted(49.9);
     final yearlyDetail =
         'Only ${_money((yearlyCharged / 12 * 100).round() / 100)}/mo';
-    final monthlyDetail = _referralAccepted ? '20% off' : 'Billed monthly';
+    final monthlyDetail = _referralAccepted ? _discountLabel : 'Billed monthly';
     final period = _billing == 'yearly' ? 'year' : 'month';
 
     return OnboardingStepScaffold(
@@ -165,7 +235,7 @@ class _SubscribeStepState extends State<SubscribeStep> {
           selected: _billing == 'yearly',
           priceLine: _priceLineFor(yearly: true),
           badge: _referralAccepted
-              ? 'Best value · 20% referral discount'
+              ? 'Best value · $_discountLabel referral discount'
               : 'Best value',
           detail: yearlyDetail,
           onTap: () => setState(() => _billing = 'yearly'),
@@ -174,7 +244,7 @@ class _SubscribeStepState extends State<SubscribeStep> {
         _PlanRow(
           selected: _billing == 'monthly',
           priceLine: _priceLineFor(yearly: false),
-          badge: _referralAccepted ? '20% referral discount' : null,
+          badge: _referralAccepted ? '$_discountLabel referral discount' : null,
           detail: monthlyDetail,
           onTap: () => setState(() => _billing = 'monthly'),
         ),
@@ -191,7 +261,10 @@ class _SubscribeStepState extends State<SubscribeStep> {
             filled: true,
             fillColor: Colors.white,
             suffixIcon: _referralAccepted
-                ? const Icon(Icons.check_circle_rounded, color: Color(0xFF2F9D6A))
+                ? const Icon(
+                    Icons.check_circle_rounded,
+                    color: Color(0xFF2F9D6A),
+                  )
                 : null,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
@@ -199,8 +272,8 @@ class _SubscribeStepState extends State<SubscribeStep> {
                 color: _referralAccepted
                     ? const Color(0xFF7EC9A0)
                     : _referralInvalid
-                        ? const Color(0xFFE8B4B4)
-                        : const Color(0xFFE0E6EE),
+                    ? const Color(0xFFE8B4B4)
+                    : const Color(0xFFE0E6EE),
               ),
             ),
             enabledBorder: OutlineInputBorder(
@@ -209,8 +282,8 @@ class _SubscribeStepState extends State<SubscribeStep> {
                 color: _referralAccepted
                     ? const Color(0xFF7EC9A0)
                     : _referralInvalid
-                        ? const Color(0xFFE8B4B4)
-                        : const Color(0xFFE0E6EE),
+                    ? const Color(0xFFE8B4B4)
+                    : const Color(0xFFE0E6EE),
               ),
             ),
             focusedBorder: OutlineInputBorder(
@@ -219,8 +292,8 @@ class _SubscribeStepState extends State<SubscribeStep> {
                 color: _referralAccepted
                     ? const Color(0xFF2F9D6A)
                     : _referralInvalid
-                        ? const Color(0xFFC44B4B)
-                        : AppColors.brand,
+                    ? const Color(0xFFC44B4B)
+                    : AppColors.brand,
               ),
             ),
             contentPadding: const EdgeInsets.symmetric(
@@ -228,15 +301,22 @@ class _SubscribeStepState extends State<SubscribeStep> {
               vertical: 14,
             ),
           ),
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
-        if (_referralAccepted) ...[
+        if (_promoChecking) ...[
           const SizedBox(height: 6),
           const Text(
-            'Referral code accepted · 20% off applied',
+            'Checking code…',
+            style: TextStyle(
+              color: AppColors.mute,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ] else if (_referralAccepted) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Referral code accepted · $_discountLabel applied',
             style: TextStyle(
               color: Color(0xFF2F9D6A),
               fontSize: 13,
@@ -259,15 +339,14 @@ class _SubscribeStepState extends State<SubscribeStep> {
         const SizedBox(height: 10),
         const _TimelineRow(
           title: 'Today, your free trial begins.',
-          body:
-              'FinanceAI analyzes connected accounts to categorize spending and track net worth.',
+          body: 'FinanceAI analyzes connected accounts to categorize spending and track net worth.',
         ),
         const _TimelineRow(
-          title: 'Get notified 7 days before your trial ends.',
-          body: 'A reminder a week before billing starts — no surprises.',
+          title: 'Get a reminder before your trial ends.',
+          body: 'We email you before billing starts — no surprises.',
         ),
         const _TimelineRow(
-          title: 'After a month, your trial ends.',
+          title: 'After $_trialDays days, your trial ends.',
           body: 'Your Plus subscription begins then. Cancel anytime.',
           isLast: true,
         ),
@@ -295,8 +374,12 @@ class _SubscribeStepState extends State<SubscribeStep> {
         ],
       ],
       actions: OnboardingActions(
-        primaryLabel: _busy ? 'Redirecting…' : 'Start your free trial',
-        onPrimary: _busy ? () {} : _startTrial,
+        primaryLabel: _busy
+            ? 'Redirecting…'
+            : _promoChecking
+            ? 'Checking code…'
+            : 'Start your free trial',
+        onPrimary: _busy || _promoChecking ? () {} : _startTrial,
         secondaryLabel: 'Skip for now',
         onSecondary: _busy ? () {} : _confirmSkip,
       ),
@@ -306,13 +389,11 @@ class _SubscribeStepState extends State<SubscribeStep> {
   String _priceLineFor({required bool yearly}) {
     final base = yearly ? 49.9 : 4.99;
     final period = yearly ? 'year' : 'month';
-    final charged = _referralAccepted
-        ? (base * (1 - _referralDiscount) * 100).round() / 100
-        : base;
-    if (_referralAccepted) {
-      return '${_money(base)}/$period → ${_money(charged)}/$period + 1 month free trial';
+    final charged = _discounted(base);
+    if (_referralAccepted && charged != base) {
+      return '${_money(base)}/$period → ${_money(charged)}/$period + $_trialDays-day free trial';
     }
-    return '${_money(charged)}/$period + 1 month free trial';
+    return '${_money(charged)}/$period + $_trialDays-day free trial';
   }
 }
 
@@ -336,11 +417,7 @@ class _SectionLabel extends StatelessWidget {
 }
 
 class _ReviewCard extends StatelessWidget {
-  const _ReviewCard({
-    super.key,
-    required this.title,
-    required this.body,
-  });
+  const _ReviewCard({super.key, required this.title, required this.body});
 
   final String title;
   final String body;
@@ -361,7 +438,11 @@ class _ReviewCard extends StatelessWidget {
           Row(
             children: List.generate(
               5,
-              (_) => const Icon(Icons.star_rounded, size: 16, color: Color(0xFFE0B84A)),
+              (_) => const Icon(
+                Icons.star_rounded,
+                size: 16,
+                color: Color(0xFFE0B84A),
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -451,8 +532,8 @@ class _PlanRow extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: badge?.contains('20%') == true ||
-                          detail.contains('20%')
+                  color:
+                      badge?.contains('off') == true || detail.contains('off')
                       ? const Color(0xFFE8F6EF)
                       : const Color(0xFFE8F3FB),
                   borderRadius: BorderRadius.circular(999),
@@ -460,7 +541,7 @@ class _PlanRow extends StatelessWidget {
                 child: Text(
                   detail,
                   style: TextStyle(
-                    color: detail.contains('20%')
+                    color: detail.contains('off')
                         ? const Color(0xFF2F9D6A)
                         : const Color(0xFF2A7FC4),
                     fontSize: 11,

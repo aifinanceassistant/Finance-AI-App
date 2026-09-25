@@ -2,6 +2,88 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
+/// Light bottom sheet for short onboarding forms (keyboard-aware).
+Future<T?> showOnboardingSheet<T>(
+  BuildContext context, {
+  required String title,
+  String? subtitle,
+  required WidgetBuilder builder,
+}) {
+  return showModalBottomSheet<T>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+    ),
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE0E6EE),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: AppColors.ink,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: AppColors.mute,
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              builder(ctx),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+InputDecoration onboardingInputDecoration(String label, {String? prefix}) {
+  OutlineInputBorder border(Color c) => OutlineInputBorder(
+    borderRadius: BorderRadius.circular(12),
+    borderSide: BorderSide(color: c),
+  );
+  return InputDecoration(
+    labelText: label,
+    prefixText: prefix,
+    filled: true,
+    fillColor: const Color(0xFFF7F9FB),
+    border: border(const Color(0xFFE4E8EE)),
+    enabledBorder: border(const Color(0xFFE4E8EE)),
+    focusedBorder: border(AppColors.brand),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+  );
+}
+
 /// Centered confirm dialog matching web onboarding skip modals.
 Future<bool> showOnboardingConfirm(
   BuildContext context, {
@@ -68,9 +150,12 @@ Future<bool> showOnboardingConfirm(
                               onPressed: () => Navigator.pop(context, false),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.ink,
-                                side: const BorderSide(color: Color(0xFFE0E6EE)),
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
+                                side: const BorderSide(
+                                  color: Color(0xFFE0E6EE),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -91,8 +176,9 @@ Future<bool> showOnboardingConfirm(
                               style: FilledButton.styleFrom(
                                 backgroundColor: AppColors.brand,
                                 foregroundColor: Colors.white,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),

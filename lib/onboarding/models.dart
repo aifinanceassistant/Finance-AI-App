@@ -1,13 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum OnboardingPhase {
-  hear,
-  security,
-  accounts,
-  moves,
-  subscribe,
-  review,
-}
+enum OnboardingPhase { hear, security, accounts, moves, subscribe, review }
 
 extension OnboardingPhaseX on OnboardingPhase {
   String get word => switch (this) {
@@ -107,52 +100,6 @@ const hearSources = <({String id, String label})>[
   (id: 'youtube', label: 'YouTube'),
   (id: 'other', label: 'Other'),
 ];
-
-const suggestedInstitutions =
-    <({String name, AccountKind kind, double balance, Color color, String last4})>[
-      (
-        name: 'Chase',
-        kind: AccountKind.depository,
-        balance: 4820.44,
-        color: Color(0xFF117ACA),
-        last4: '4421',
-      ),
-      (
-        name: 'Amex',
-        kind: AccountKind.credit,
-        balance: 1240.18,
-        color: Color(0xFF016FD0),
-        last4: '1005',
-      ),
-      (
-        name: 'Fidelity',
-        kind: AccountKind.investment,
-        balance: 48200,
-        color: Color(0xFF4C8C2B),
-        last4: '2290',
-      ),
-      (
-        name: 'Ally',
-        kind: AccountKind.depository,
-        balance: 12650,
-        color: Color(0xFF7700FF),
-        last4: '8810',
-      ),
-      (
-        name: 'Vanguard',
-        kind: AccountKind.investment,
-        balance: 31840,
-        color: Color(0xFFC41230),
-        last4: '7742',
-      ),
-      (
-        name: 'Capital One',
-        kind: AccountKind.credit,
-        balance: 860.5,
-        color: Color(0xFFD03027),
-        last4: '3312',
-      ),
-    ];
 
 String money(num n) {
   final fixed = n % 1 == 0 ? n.toInt().toString() : n.toStringAsFixed(2);

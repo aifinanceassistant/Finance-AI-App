@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../auth/auth_controller.dart';
+import '../../auth/auth_scope.dart';
 import '../../theme/app_theme.dart';
 import '../onboarding_layout.dart';
 import '../onboarding_shell.dart';
@@ -22,6 +25,10 @@ class SecurityStep extends StatefulWidget {
 class _SecurityStepState extends State<SecurityStep> {
   bool _setup = false;
   bool _verified = false;
+  bool _enrolling = false;
+  bool _verifying = false;
+  TotpEnrollment? _enrollment;
+  String? _error;
   final _digits = List.generate(6, (_) => TextEditingController());
   final _focus = List.generate(6, (_) => FocusNode());
 
@@ -34,6 +41,29 @@ class _SecurityStepState extends State<SecurityStep> {
       f.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _beginSetup() async {
+    setState(() {
+      _setup = true;
+      _error = null;
+    });
+    if (_enrollment != null || _enrolling) return;
+    setState(() => _enrolling = true);
+    final res = await AuthScope.read(context).startTotpEnrollment();
+    if (!mounted) return;
+    setState(() {
+      _enrolling = false;
+      _enrollment = res.enrollment;
+      _error = res.error == null ? null : 'Couldn’t start setup: ${res.error}';
+    });
+  }
+
+  void _clearDigits() {
+    for (final c in _digits) {
+      c.clear();
+    }
+    _focus.first.requestFocus();
   }
 
   void _onDigit(int index, String value) {
@@ -51,7 +81,29 @@ class _SecurityStepState extends State<SecurityStep> {
   }
 
   Future<void> _complete() async {
-    if (_digits.any((c) => c.text.isEmpty)) return;
+    final enrollment = _enrollment;
+    if (enrollment == null || _verifying) return;
+    if (_digits.any((c) => c.text.isEmpty)) {
+      setState(() => _error = 'Enter all six digits from your authenticator.');
+      return;
+    }
+    setState(() {
+      _verifying = true;
+      _error = null;
+    });
+    final err = await AuthScope.read(context).verifyTotp(
+      _digits.map((c) => c.text).join(),
+      factorId: enrollment.factorId,
+    );
+    if (!mounted) return;
+    if (err != null) {
+      setState(() {
+        _verifying = false;
+        _error = err;
+      });
+      _clearDigits();
+      return;
+    }
     setState(() => _verified = true);
     await Future<void>.delayed(const Duration(milliseconds: 900));
     if (!mounted) return;
@@ -92,10 +144,9 @@ class _SecurityStepState extends State<SecurityStep> {
         if (!_setup) ...[
           OnboardingChoiceTile(
             label: 'Enable authenticator',
-            body:
-                'Recommended. Works with Google Authenticator, Authy, 1Password, and more.',
+            body: 'Recommended. Works with Google Authenticator, Authy, 1Password, and more.',
             selected: false,
-            onTap: () => setState(() => _setup = true),
+            onTap: _beginSetup,
           ),
           OnboardingChoiceTile(
             label: 'Continue without 2FA',
@@ -121,16 +172,30 @@ class _SecurityStepState extends State<SecurityStep> {
                     color: const Color(0xFFF7F9FB),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
-                    Icons.qr_code_2_rounded,
-                    size: 120,
-                    color: AppColors.ink,
-                  ),
+                  child: _enrollment != null
+                      ? QrImageView(
+                          data: _enrollment!.uri,
+                          size: 150,
+                          backgroundColor: Colors.white,
+                        )
+                      : _enrolling
+                      ? const CircularProgressIndicator(strokeWidth: 2)
+                      : const Icon(
+                          Icons.error_outline_rounded,
+                          size: 40,
+                          color: AppColors.mute,
+                        ),
                 ),
-                const SizedBox(height: 14),
-                const SelectableText(
-                  'NQU6B7LBKUAPXQX6YO7CVBXHQT774DPC',
-                  style: TextStyle(
+                const SizedBox(height: 10),
+                const Text(
+                  'On this phone? Copy the key into your authenticator app instead.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.mute, fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                SelectableText(
+                  _enrollment?.secret ?? '',
+                  style: const TextStyle(
                     color: AppColors.ink,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
@@ -139,19 +204,19 @@ class _SecurityStepState extends State<SecurityStep> {
                 ),
                 const SizedBox(height: 8),
                 TextButton(
-                  onPressed: () {
-                    Clipboard.setData(
-                      const ClipboardData(
-                        text: 'NQU6B7LBKUAPXQX6YO7CVBXHQT774DPC',
-                      ),
-                    );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Secret copied'),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
+                  onPressed: _enrollment == null
+                      ? null
+                      : () {
+                          Clipboard.setData(
+                            ClipboardData(text: _enrollment!.secret),
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Secret copied'),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
                   child: const Text('Copy setup key'),
                 ),
               ],
@@ -189,11 +254,10 @@ class _SecurityStepState extends State<SecurityStep> {
                       fillColor: Colors.white,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: Color(0xFFE0E6EE),
-                        ),
+                        borderSide: const BorderSide(color: Color(0xFFE0E6EE)),
                       ),
                     ),
+                    enabled: _enrollment != null && !_verifying,
                     onChanged: (v) => _onDigit(i, v),
                     onTap: () => _digits[i].selection = TextSelection(
                       baseOffset: 0,
@@ -203,12 +267,23 @@ class _SecurityStepState extends State<SecurityStep> {
                 ),
             ],
           ),
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _error!,
+              style: const TextStyle(
+                color: Color(0xFFC44B4B),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ],
       ],
       actions: _setup
           ? OnboardingActions(
-              primaryLabel: 'Verify and continue',
-              onPrimary: _complete,
+              primaryLabel: _verifying ? 'Verifying…' : 'Verify and continue',
+              onPrimary: _verifying ? () {} : _complete,
               secondaryLabel: 'Skip for now',
               onSecondary: widget.onSkip,
             )

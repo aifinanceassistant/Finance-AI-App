@@ -11,7 +11,13 @@ import 'app_env.dart';
 import '../billing/entitlements.dart';
 import '../dashboard/data.dart' show DisplayCurrency;
 
-enum AuthDestination { landing, onboarding, dashboard, resetPassword }
+enum AuthDestination { landing, mfa, onboarding, dashboard, resetPassword }
+
+/// Result of an authenticated API call; [error] is the server's message.
+typedef ApiResult = ({bool ok, Object? data, String? error});
+
+/// A pending TOTP enrollment (shown as QR + manual key).
+typedef TotpEnrollment = ({String factorId, String uri, String secret});
 
 class AuthUser {
   const AuthUser({
@@ -85,10 +91,7 @@ class AuthController extends ChangeNotifier {
   factory AuthController.supabase() => AuthController._(isFake: false);
 
   /// Deterministic controller for widget tests (no network).
-  factory AuthController.fake({
-    AuthUser? user,
-    bool succeed = true,
-  }) =>
+  factory AuthController.fake({AuthUser? user, bool succeed = true}) =>
       AuthController._(isFake: true, initialUser: user, fakeSucceed: succeed);
 
   final bool isFake;
@@ -98,9 +101,11 @@ class AuthController extends ChangeNotifier {
   bool _loading = true;
   bool _ready = false;
   bool _needsPasswordReset = false;
+  bool _mfaRequired = false;
   bool _postAuthNavStarted = false;
   bool _closingAuthBrowser = false;
   StreamSubscription<AuthState>? _sub;
+
   /// Drops overlapping [_applyUser] results from token-refresh races.
   var _applyGeneration = 0;
 
@@ -110,9 +115,16 @@ class AuthController extends ChangeNotifier {
   bool get isSignedIn => _user != null;
   bool get needsPasswordReset => _needsPasswordReset;
 
+  /// Signed in with a verified TOTP factor but the session is still aal1.
+  /// The API rejects these sessions until the challenge passes.
+  bool get mfaRequired => _mfaRequired;
+
   /// Signed in but onboarding status not resolved yet — show a loader.
   bool get profilePending =>
-      _user != null && !_user!.onboardingKnown && !_needsPasswordReset;
+      _user != null &&
+      !_user!.onboardingKnown &&
+      !_needsPasswordReset &&
+      !_mfaRequired;
 
   /// Completes once [profilePending] is false (retries end within ~30s).
   Future<void> waitForProfile() {
@@ -209,6 +221,7 @@ class AuthController extends ChangeNotifier {
       if (u == null) {
         _user = null;
         _needsPasswordReset = false;
+        _mfaRequired = false;
         _postAuthNavStarted = false;
         notifyListeners();
         return;
@@ -261,10 +274,12 @@ class AuthController extends ChangeNotifier {
     }
 
     final gen = ++_applyGeneration;
-    final previous =
-        _user?.id == sbUser.id && _user!.onboardingKnown ? _user : null;
-    final cached =
-        previous == null ? await _readOnboardedCache(sbUser.id) : null;
+    final previous = _user?.id == sbUser.id && _user!.onboardingKnown
+        ? _user
+        : null;
+    final cached = previous == null
+        ? await _readOnboardedCache(sbUser.id)
+        : null;
     final meta = sbUser.userMetadata ?? {};
     // Seed from the in-memory user, else the on-device cache, so a failed
     // profile fetch (e.g. network still waking after resume) can't route a
@@ -272,17 +287,23 @@ class AuthController extends ChangeNotifier {
     var mapped = AuthUser(
       id: sbUser.id,
       email: email,
-      name: (meta['full_name'] as String?) ??
+      name:
+          (meta['full_name'] as String?) ??
           (meta['name'] as String?) ??
           previous?.name,
-      onboardingCompleted:
-          previous?.onboardingCompleted ?? cached ?? false,
+      onboardingCompleted: previous?.onboardingCompleted ?? cached ?? false,
       onboardingKnown: previous != null || cached != null,
       currency: previous?.currency ?? 'USD',
       role: previous?.role ?? 'user',
       subscriptionActive: previous?.subscriptionActive ?? false,
       entitlements: previous?.entitlements,
     );
+    _mfaRequired = _sessionNeedsMfa();
+    if (_mfaRequired) {
+      _user = mapped.copyWith(onboardingKnown: true);
+      notifyListeners();
+      return;
+    }
     mapped = await _mergeProfile(mapped);
     if (gen != _applyGeneration) return;
     _user = mapped;
@@ -320,8 +341,8 @@ class AuthController extends ChangeNotifier {
       if (data == null) return base;
       final currency =
           ((data['currency'] as String?)?.trim().isNotEmpty ?? false)
-              ? (data['currency'] as String).trim().toUpperCase()
-              : base.currency;
+          ? (data['currency'] as String).trim().toUpperCase()
+          : base.currency;
       DisplayCurrency.setCode(currency);
       // ignore: discarded_futures
       _refreshDisplayFx(currency);
@@ -333,15 +354,15 @@ class AuthController extends ChangeNotifier {
           ? Entitlements.fromJson(data['entitlements'])
           : base.entitlements;
       final admin = isAppAdminRole(role);
-      final subscriptionActive = admin ||
+      final subscriptionActive =
+          admin ||
           data['subscription_active'] == true ||
           (entitlements?.isSubscribed ?? false);
 
       // Once onboarding is known complete for this session, don't regress on
       // a transient profile payload that omits the timestamp.
       final onboardedFromApi = data['onboarding_completed_at'] != null;
-      final onboardingCompleted =
-          onboardedFromApi || base.onboardingCompleted;
+      final onboardingCompleted = onboardedFromApi || base.onboardingCompleted;
       // ignore: discarded_futures
       _writeOnboardedCache(base.id, onboardingCompleted);
 
@@ -378,6 +399,14 @@ class AuthController extends ChangeNotifier {
     } catch (_) {}
   }
 
+  bool _sessionNeedsMfa() {
+    final client = _client;
+    if (client == null || client.auth.currentSession == null) return false;
+    final aal = client.auth.mfa.getAuthenticatorAssuranceLevel();
+    return aal.nextLevel == AuthenticatorAssuranceLevels.aal2 &&
+        aal.currentLevel != AuthenticatorAssuranceLevels.aal2;
+  }
+
   Future<Map<String, dynamic>?> _apiJson(
     String method,
     String path, {
@@ -393,20 +422,32 @@ class AuthController extends ChangeNotifier {
     String method,
     String path, {
     Map<String, dynamic>? body,
-  }) =>
-      _apiDecode(method, path, body: body);
+  }) => _apiDecode(method, path, body: body);
 
   Future<Object?> _apiDecode(
     String method,
     String path, {
     Map<String, dynamic>? body,
   }) async {
-    final base = AppEnv.appUrl;
-    if (base.isEmpty) return null;
-    final token = _client?.auth.currentSession?.accessToken;
-    if (token == null && !isFake) return null;
+    final res = await apiRequest(method, path, body: body);
+    return res.ok ? res.data : null;
+  }
 
-    if (isFake) return null;
+  /// Like [apiDecode] but keeps the server's error message on failure.
+  Future<ApiResult> apiRequest(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
+    if (isFake) return (ok: fakeSucceed, data: null, error: null);
+    final base = AppEnv.appUrl;
+    if (base.isEmpty) {
+      return (ok: false, data: null, error: 'App URL is not configured');
+    }
+    final token = _client?.auth.currentSession?.accessToken;
+    if (token == null) {
+      return (ok: false, data: null, error: 'You are signed out');
+    }
 
     final uri = Uri.parse('$base$path');
     final headers = {
@@ -415,31 +456,52 @@ class AuthController extends ChangeNotifier {
     };
 
     late http.Response res;
-    if (method == 'GET') {
-      res = await http.get(uri, headers: headers);
-    } else if (method == 'POST') {
-      res = await http.post(
-        uri,
-        headers: headers,
-        body: body == null ? null : jsonEncode(body),
+    try {
+      if (method == 'GET') {
+        res = await http.get(uri, headers: headers);
+      } else if (method == 'POST') {
+        res = await http.post(
+          uri,
+          headers: headers,
+          body: body == null ? null : jsonEncode(body),
+        );
+      } else if (method == 'PATCH') {
+        res = await http.patch(
+          uri,
+          headers: headers,
+          body: body == null ? null : jsonEncode(body),
+        );
+      } else if (method == 'DELETE') {
+        res = await http.delete(uri, headers: headers);
+      } else {
+        return (ok: false, data: null, error: 'Unsupported method $method');
+      }
+    } catch (_) {
+      return (
+        ok: false,
+        data: null,
+        error: 'Network error — check your connection',
       );
-    } else if (method == 'PATCH') {
-      res = await http.patch(
-        uri,
-        headers: headers,
-        body: body == null ? null : jsonEncode(body),
-      );
-    } else if (method == 'DELETE') {
-      res = await http.delete(uri, headers: headers);
-    } else {
-      return null;
     }
 
-    if (res.statusCode < 200 || res.statusCode >= 300) return null;
-    if (res.body.isEmpty || res.body == 'null') {
-      return method == 'DELETE' ? true : null;
+    Object? decoded;
+    if (res.body.isNotEmpty && res.body != 'null') {
+      try {
+        decoded = jsonDecode(res.body);
+      } catch (_) {
+        decoded = null;
+      }
     }
-    return jsonDecode(res.body);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      final message = decoded is Map && decoded['error'] is String
+          ? decoded['error'] as String
+          : 'Request failed (${res.statusCode})';
+      return (ok: false, data: decoded, error: message);
+    }
+    if (decoded == null && method == 'DELETE') {
+      return (ok: true, data: true, error: null);
+    }
+    return (ok: true, data: decoded, error: null);
   }
 
   Future<void> syncProfile() async {
@@ -453,25 +515,148 @@ class AuthController extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> completeOnboarding() async {
+  /// Marks onboarding done on the server; returns an error message on failure
+  /// (completion is only cached locally once the server accepted it).
+  Future<String?> completeOnboarding() async {
     if (isFake) {
       if (_user != null) {
         _user = _user!.copyWith(onboardingCompleted: true);
         notifyListeners();
       }
-      return;
+      return null;
     }
-    await _apiJson('PATCH', '/api/profile', body: {'onboarding_completed': true});
+    final res = await apiRequest(
+      'PATCH',
+      '/api/profile',
+      body: {'onboarding_completed': true},
+    );
+    if (!res.ok) return res.error;
     if (_user != null) {
       _user = _user!.copyWith(onboardingCompleted: true, onboardingKnown: true);
       await _writeOnboardedCache(_user!.id, true);
       notifyListeners();
     }
+    return null;
+  }
+
+  /// Merges answers into `profiles.onboarding_answers` (fire-and-forget safe).
+  Future<void> saveOnboardingAnswers(Map<String, dynamic> answers) async {
+    final res = await apiRequest(
+      'PATCH',
+      '/api/profile',
+      body: {'onboarding_answers': answers},
+    );
+    if (!res.ok) debugPrint('Onboarding answers not saved: ${res.error}');
+  }
+
+  Future<bool> hasVerifiedTotp() async {
+    final client = _client;
+    if (client == null) return false;
+    try {
+      final factors = await client.auth.mfa.listFactors();
+      return factors.totp.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Starts a fresh TOTP enrollment, clearing abandoned unverified factors.
+  Future<({TotpEnrollment? enrollment, String? error})>
+  startTotpEnrollment() async {
+    final client = _client;
+    if (client == null) {
+      return (enrollment: null, error: 'Auth is not configured');
+    }
+    try {
+      final factors = await client.auth.mfa.listFactors();
+      for (final f in factors.all) {
+        if (f.factorType == FactorType.totp &&
+            f.status == FactorStatus.unverified) {
+          await client.auth.mfa.unenroll(f.id);
+        }
+      }
+      final res = await client.auth.mfa.enroll(
+        factorType: FactorType.totp,
+        friendlyName:
+            'FinanceAI mobile ${DateTime.now().toIso8601String().substring(0, 10)}',
+      );
+      final totp = res.totp;
+      if (totp == null) {
+        return (enrollment: null, error: 'Enrollment returned no TOTP data');
+      }
+      return (
+        enrollment: (factorId: res.id, uri: totp.uri, secret: totp.secret),
+        error: null,
+      );
+    } on AuthException catch (e) {
+      return (enrollment: null, error: e.message);
+    } catch (e) {
+      return (enrollment: null, error: e.toString());
+    }
+  }
+
+  /// Verifies a six-digit code. With [factorId] null, uses the first verified
+  /// factor (login challenge). On success the session becomes aal2.
+  Future<String?> verifyTotp(String code, {String? factorId}) async {
+    final client = _client;
+    if (client == null) return 'Auth is not configured';
+    try {
+      var id = factorId;
+      if (id == null) {
+        final factors = await client.auth.mfa.listFactors();
+        if (factors.totp.isEmpty) return 'No authenticator is set up';
+        id = factors.totp.first.id;
+      }
+      await client.auth.mfa.challengeAndVerify(factorId: id, code: code);
+    } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('invalid') || msg.contains('expired')) {
+        return "That code didn't match. Check your authenticator and try again.";
+      }
+      return e.message;
+    } catch (e) {
+      return e.toString();
+    }
+    _mfaRequired = false;
+    await apiRequest('PATCH', '/api/profile', body: {'sync_two_factor': true});
+    final u = client.auth.currentUser;
+    if (u != null) await _applyUser(u);
+    return null;
+  }
+
+  /// Removes every TOTP factor (requires an aal2 session).
+  Future<String?> disableTotp() async {
+    final client = _client;
+    if (client == null) return 'Auth is not configured';
+    try {
+      final factors = await client.auth.mfa.listFactors();
+      for (final f in factors.all) {
+        if (f.factorType == FactorType.totp) {
+          await client.auth.mfa.unenroll(f.id);
+        }
+      }
+      await client.auth.refreshSession();
+    } on AuthException catch (e) {
+      return e.message;
+    } catch (e) {
+      return e.toString();
+    }
+    await apiRequest('PATCH', '/api/profile', body: {'sync_two_factor': true});
+    return null;
+  }
+
+  /// Permanently deletes the account server-side, then signs out locally.
+  Future<String?> deleteAccount() async {
+    final res = await apiRequest('DELETE', '/api/account');
+    if (!res.ok) return res.error;
+    await logout();
+    return null;
   }
 
   AuthDestination destinationForSession() {
     if (_needsPasswordReset) return AuthDestination.resetPassword;
     if (_user == null) return AuthDestination.landing;
+    if (_mfaRequired) return AuthDestination.mfa;
     if (!_user!.onboardingCompleted) return AuthDestination.onboarding;
     return AuthDestination.dashboard;
   }
@@ -539,8 +724,7 @@ class AuthController extends ChangeNotifier {
       if (res.user != null &&
           (res.user!.identities == null || res.user!.identities!.isEmpty)) {
         return (
-          error:
-              'This email is already registered. If you haven’t confirmed your email yet, check your inbox. Otherwise, try logging in.',
+          error: 'This email is already registered. If you haven’t confirmed your email yet, check your inbox. Otherwise, try logging in.',
           needsEmailConfirm: false,
         );
       }
@@ -555,8 +739,7 @@ class AuthController extends ChangeNotifier {
           msg.contains('user already exists') ||
           msg.contains('already been registered')) {
         return (
-          error:
-              'This email is already registered. If you haven’t confirmed your email yet, check your inbox. Otherwise, try logging in.',
+          error: 'This email is already registered. If you haven’t confirmed your email yet, check your inbox. Otherwise, try logging in.',
           needsEmailConfirm: false,
         );
       }
@@ -668,6 +851,7 @@ class AuthController extends ChangeNotifier {
     } catch (_) {}
     _user = null;
     _needsPasswordReset = false;
+    _mfaRequired = false;
     _postAuthNavStarted = false;
     notifyListeners();
   }

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../auth/auth_controller.dart';
+import '../../auth/auth_navigation.dart';
 import '../../auth/auth_scope.dart';
 import '../../billing/stripe_billing.dart';
 import '../../locale/locale_controller.dart';
@@ -102,6 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _planSubtitle = 'Start a free trial to unlock Plus';
   bool _subscriptionActive = false;
   bool _billingLoaded = false;
+  bool _twoFaOn = false;
   String _spaceSwitcher = 'tabs';
   List<String> _tags = ['Business'];
   String _language = 'en';
@@ -131,7 +134,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _loadBilling();
       // ignore: discarded_futures
       _loadProfilePrefs();
+      // ignore: discarded_futures
+      _loadTwoFactor();
     });
+  }
+
+  Future<void> _loadTwoFactor() async {
+    final on = await AuthScope.read(context).hasVerifiedTotp();
+    if (mounted) setState(() => _twoFaOn = on);
   }
 
   Future<void> _loadProfilePrefs() async {
@@ -770,9 +780,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         _SettingsRow(
           title: 'Two-factor authentication',
-          body: 'Authenticator codes · coming soon',
-          action: 'Coming soon',
-          onTap: () => toast(context, 'Two-factor authentication · coming soon'),
+          body: _twoFaOn ? 'Authenticator codes · On' : 'Authenticator codes · Off',
+          action: _twoFaOn ? 'Disable 2FA' : 'Enable 2FA',
+          onTap: _twoFactorSheet,
         ),
         const SizedBox(height: 12),
         const _BlockTitle('Actions'),
@@ -862,9 +872,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         _SettingsRow(
           title: 'Authenticator',
-          body: 'Two-factor codes via authenticator app · coming soon',
-          action: 'Coming soon',
-          onTap: () => toast(context, 'Two-factor authentication · coming soon'),
+          body: _twoFaOn
+              ? 'Two-factor codes via authenticator app · On'
+              : 'Two-factor codes via authenticator app · Off',
+          action: 'Manage',
+          onTap: _twoFactorSheet,
         ),
         _SettingsRow(
           title: 'Active sessions',
@@ -1866,7 +1878,150 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _twoFactorSheet() async {
+    final auth = AuthScope.read(context);
+    if (_twoFaOn) {
+      var busy = false;
+      String? error;
+      await showDashSheet<void>(
+        context: context,
+        title: 'Two-factor authentication',
+        description: 'Authenticator codes are required when you sign in',
+        builder: (ctx, setSheet) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Turning this off means only your password protects your account.',
+              style: TextStyle(color: ctx.dashMute, fontSize: 13, height: 1.4),
+            ),
+            if (error != null) ...[
+              const SizedBox(height: 8),
+              Text(error!, style: const TextStyle(color: AppColors.danger)),
+            ],
+            const SizedBox(height: 16),
+            sheetCancelSave(
+              context: ctx,
+              saveLabel: busy ? 'Disabling…' : 'Disable 2FA',
+              onSave: () async {
+                if (busy) return;
+                setSheet(() {
+                  busy = true;
+                  error = null;
+                });
+                final err = await auth.disableTotp();
+                if (!ctx.mounted) return;
+                if (err != null) {
+                  setSheet(() {
+                    busy = false;
+                    error = err;
+                  });
+                  return;
+                }
+                Navigator.pop(ctx);
+                if (!mounted) return;
+                setState(() => _twoFaOn = false);
+                toast(context, '2FA disabled');
+              },
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final started = await auth.startTotpEnrollment();
+    if (!mounted) return;
+    final enrollment = started.enrollment;
+    if (enrollment == null) {
+      toast(context, 'Couldn’t start setup: ${started.error}');
+      return;
+    }
+    final code = TextEditingController();
+    var busy = false;
+    String? error;
+    await showDashSheet<void>(
+      context: context,
+      title: 'Enable two-factor authentication',
+      description:
+          'Scan with Google Authenticator, 1Password, Authy, or similar — or copy the key',
+      builder: (ctx, setSheet) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              color: Colors.white,
+              child: QrImageView(data: enrollment.uri, size: 160),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SelectableText(
+            enrollment.secret,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: ctx.dashInk,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: enrollment.secret));
+              if (mounted) toast(context, 'Setup key copied');
+            },
+            child: const Text('Copy setup key'),
+          ),
+          const DashFieldLabel('Six-digit code'),
+          DashTextField(
+            controller: code,
+            hint: '123456',
+            keyboardType: TextInputType.number,
+            errorText: error,
+          ),
+          const SizedBox(height: 12),
+          sheetCancelSave(
+            context: ctx,
+            saveLabel: busy ? 'Verifying…' : 'Enable 2FA',
+            onSave: () async {
+              final digits = code.text.replaceAll(RegExp(r'\D'), '');
+              if (busy) return;
+              if (digits.length != 6) {
+                setSheet(() => error = 'Enter the six-digit code');
+                return;
+              }
+              setSheet(() {
+                busy = true;
+                error = null;
+              });
+              final err = await auth.verifyTotp(
+                digits,
+                factorId: enrollment.factorId,
+              );
+              if (!ctx.mounted) return;
+              if (err != null) {
+                code.clear();
+                setSheet(() {
+                  busy = false;
+                  error = err;
+                });
+                return;
+              }
+              Navigator.pop(ctx);
+              if (!mounted) return;
+              setState(() => _twoFaOn = true);
+              toast(context, '2FA enabled');
+            },
+          ),
+        ],
+      ),
+    );
+    code.dispose();
+  }
+
   Future<void> _deleteSheet() async {
+    var busy = false;
+    String? error;
     await showDashSheet<void>(
       context: context,
       title: 'Delete account',
@@ -1879,6 +2034,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               'You’ll lose access to linked banks, goals, and AI history. Export first if you need a copy.',
               style: TextStyle(color: context.dashMute, fontSize: 13, height: 1.4),
             ),
+            if (error != null) ...[
+              const SizedBox(height: 8),
+              Text(error!, style: const TextStyle(color: AppColors.danger)),
+            ],
             const SizedBox(height: 16),
             Row(
               children: [
@@ -1891,13 +2050,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      toast(context, 'Deletion requested');
-                    },
-                    child: const Text(
-                      'Delete',
-                      style: TextStyle(
+                    onPressed: busy
+                        ? null
+                        : () async {
+                            setSheet(() {
+                              busy = true;
+                              error = null;
+                            });
+                            final err =
+                                await AuthScope.read(context).deleteAccount();
+                            if (!ctx.mounted) return;
+                            if (err != null) {
+                              setSheet(() {
+                                busy = false;
+                                error = err;
+                              });
+                              return;
+                            }
+                            Navigator.pop(ctx);
+                            if (mounted) await goToDestination(context);
+                          },
+                    child: Text(
+                      busy ? 'Deleting…' : 'Delete',
+                      style: const TextStyle(
                         color: AppColors.danger,
                         fontWeight: FontWeight.w700,
                       ),

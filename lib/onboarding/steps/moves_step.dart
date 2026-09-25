@@ -5,11 +5,7 @@ import '../onboarding_layout.dart';
 import '../onboarding_shell.dart';
 
 class MovesStep extends StatefulWidget {
-  const MovesStep({
-    super.key,
-    required this.onContinue,
-    required this.onSkip,
-  });
+  const MovesStep({super.key, required this.onContinue, required this.onSkip});
 
   final VoidCallback onContinue;
   final VoidCallback onSkip;
@@ -38,8 +34,7 @@ class _MovesStepState extends State<MovesStep>
   Widget build(BuildContext context) {
     return OnboardingStepScaffold(
       title: 'Money moves',
-      subtitle:
-          'FinanceAI sorts activity into spending, transfers, and earnings so budgets stay clear.',
+      subtitle: 'FinanceAI sorts activity into spending, transfers, and earnings so budgets stay clear.',
       body: [
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -49,9 +44,7 @@ class _MovesStepState extends State<MovesStep>
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(
-                    label: Text(
-                      const ['Spending', 'Transfers', 'Earnings'][i],
-                    ),
+                    label: Text(const ['Spending', 'Transfers', 'Earnings'][i]),
                     selected: _tabs.index == i,
                     onSelected: (_) => setState(() => _tabs.index = i),
                   ),
@@ -84,33 +77,30 @@ class _MovePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final content = switch (index) {
       0 => (
-          title: 'Spending',
-          body:
-              'Everyday purchases and bills. These count toward budgets and category totals.',
-          rows: const [
-            ('Whole Foods', 'Groceries', '-\$86.40'),
-            ('Uber', 'Transportation', '-\$18.20'),
-            ('Netflix', 'Subscriptions', '-\$15.49'),
-          ],
-        ),
+        title: 'Spending',
+        body: 'Everyday purchases and bills. These count toward budgets and category totals.',
+        rows: const [
+          ('Whole Foods', 'Groceries', '-\$86.40'),
+          ('Uber', 'Transportation', '-\$18.20'),
+          ('Netflix', 'Subscriptions', '-\$15.49'),
+        ],
+      ),
       1 => (
-          title: 'Transfers',
-          body:
-              'Money you move between your own accounts. These stay out of spending budgets.',
-          rows: const [
-            ('Chase → Amex', 'Transfer', '-\$500.00'),
-            ('Ally → Chase', 'Transfer', '+\$1,000.00'),
-          ],
-        ),
+        title: 'Transfers',
+        body: 'Money you move between your own accounts. These stay out of spending budgets.',
+        rows: const [
+          ('Chase → Amex', 'Transfer', '-\$500.00'),
+          ('Ally → Chase', 'Transfer', '+\$1,000.00'),
+        ],
+      ),
       _ => (
-          title: 'Earnings',
-          body:
-              'Paychecks and other income. These help set your monthly plan ceiling.',
-          rows: const [
-            ('Acme Corp Payroll', 'Income', '+\$4,200.00'),
-            ('Dividend', 'Income', '+\$42.10'),
-          ],
-        ),
+        title: 'Earnings',
+        body: 'Paychecks and other income. These help set your monthly plan ceiling.',
+        rows: const [
+          ('Acme Corp Payroll', 'Income', '+\$4,200.00'),
+          ('Dividend', 'Income', '+\$42.10'),
+        ],
+      ),
     };
 
     return Container(

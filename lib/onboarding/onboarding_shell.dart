@@ -62,8 +62,8 @@ class OnboardingShell extends StatelessWidget {
                       backgroundColor: i == onboardingOrder.indexOf(phase)
                           ? AppColors.brand
                           : i < onboardingOrder.indexOf(phase)
-                              ? const Color(0xFFD9EEFB)
-                              : const Color(0xFFF0F3F7),
+                          ? const Color(0xFFD9EEFB)
+                          : const Color(0xFFF0F3F7),
                       foregroundColor: i == onboardingOrder.indexOf(phase)
                           ? Colors.white
                           : AppColors.ink,
@@ -105,10 +105,7 @@ class OnboardingShell extends StatelessWidget {
 }
 
 class _MinimalChrome extends StatelessWidget {
-  const _MinimalChrome({
-    required this.index,
-    required this.onOpenSteps,
-  });
+  const _MinimalChrome({required this.index, required this.onOpenSteps});
 
   final int index;
   final VoidCallback onOpenSteps;
@@ -216,10 +213,7 @@ class OnboardingActions extends StatelessWidget {
         ),
         child: Text(
           primaryLabel,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-          ),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
         ),
       ),
     );
