@@ -322,65 +322,60 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> {
         child: ListView(
           padding: const EdgeInsets.only(bottom: 28),
           children: [
-            DashPageHeader(
-              title: 'Users & permissions',
-              subtitle:
-                  'Manage who can access ${spaces.space.name}. Your role: $yourRole',
-              actions: [
-                if (_canManage)
-                  AccentButton(
-                    label: 'Invite member',
-                    onPressed: _openInvite,
-                  ),
-              ],
+            DashFeedChrome(
+              title: 'Team',
+              subtitle: _loading
+                  ? 'Loading…'
+                  : '${_members.length} member${_members.length == 1 ? '' : 's'} · you’re $yourRole',
+              showPrimary: _canManage,
+              onPrimary: _canManage ? _openInvite : null,
+              primaryTooltip: 'Invite member',
+              primaryIcon: Icons.person_add_alt_1_outlined,
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: DashPanel(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: _loading
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: ListShimmer(rows: 4),
-                      )
-                    : _error != null
-                        ? Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 24),
-                            child: Text(
-                              _error!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: context.dashMute),
-                            ),
-                          )
-                        : _members.isEmpty
-                            ? Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 24),
-                                child: Text(
-                                  _canManage
-                                      ? 'No members yet. Invite someone on Plus or Family.'
-                                      : 'You don’t have permission to view members.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: context.dashMute,
-                                    fontSize: 13,
-                                  ),
+              child: _loading
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: ListShimmer(rows: 4),
+                    )
+                  : _error != null
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Text(
+                            _error!,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: context.dashMute),
+                          ),
+                        )
+                      : _members.isEmpty
+                          ? Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 24),
+                              child: Text(
+                                _canManage
+                                    ? 'No members yet. Invite someone on Plus or Family.'
+                                    : 'You don’t have permission to view members.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: context.dashMute,
+                                  fontSize: 13,
                                 ),
-                              )
-                            : Column(
-                                children: [
-                                  for (var i = 0; i < _members.length; i++)
-                                    _MemberTile(
-                                      member: _members[i],
-                                      canManage: _canManage &&
-                                          _members[i].role != 'owner',
-                                      showDivider: i < _members.length - 1,
-                                      onEdit: () => _openEdit(_members[i]),
-                                      onRemove: () => _remove(_members[i]),
-                                    ),
-                                ],
                               ),
-              ),
+                            )
+                          : Column(
+                              children: [
+                                for (var i = 0; i < _members.length; i++)
+                                  _MemberTile(
+                                    member: _members[i],
+                                    canManage: _canManage &&
+                                        _members[i].role != 'owner',
+                                    showDivider: i < _members.length - 1,
+                                    onEdit: () => _openEdit(_members[i]),
+                                    onRemove: () => _remove(_members[i]),
+                                  ),
+                              ],
+                            ),
             ),
             if (!spaces.selfEntitlements.canInvite &&
                 !spaces.selfEntitlements.isAppAdmin) ...[
