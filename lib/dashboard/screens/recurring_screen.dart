@@ -38,7 +38,7 @@ const _filterFields = [
   FilterFieldDef(id: 'status', label: 'Status', type: FilterFieldType.select),
 ];
 
-const _statusLabels = ['Succeeded', 'Pending', 'Failed'];
+const _statusLabels = ['Active', 'Paused', 'Ended'];
 const _cadences = ['Weekly', 'Biweekly', 'Monthly', 'Quarterly', 'Yearly'];
 
 final _detectedSamples = [
@@ -84,11 +84,11 @@ Widget _autoApplySwitch({
 String _statusLabel(TxnStatus status) {
   switch (status) {
     case TxnStatus.succeeded:
-      return 'Succeeded';
+      return 'Active';
     case TxnStatus.pending:
-      return 'Pending';
+      return 'Paused';
     case TxnStatus.failed:
-      return 'Failed';
+      return 'Ended';
   }
 }
 
@@ -166,6 +166,8 @@ class _RecurringScreenState extends State<RecurringScreen> {
   Map<String, List<DemoRecurring>> get _calendarGroups {
     final map = <String, List<DemoRecurring>>{};
     for (final r in _recurring) {
+      if (r.status == TxnStatus.failed) continue;
+      if (r.next.trim().isEmpty || r.next == '—') continue;
       map.putIfAbsent(r.next, () => []).add(r);
     }
     final entries = map.entries.toList()
@@ -598,6 +600,29 @@ class _RecurringScreenState extends State<RecurringScreen> {
       actions: [
         TextButton(
           onPressed: () async {
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Remove recurring?'),
+                content: Text(
+                  'Remove “${item.name}”? This can’t be undone.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text(
+                      'Remove',
+                      style: TextStyle(color: Color(0xFFC53030)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+            if (confirmed != true || !mounted) return;
             final ok = await _ctrl.remove(item.id);
             if (!mounted) return;
             Navigator.pop(context);

@@ -408,6 +408,27 @@ class _GoalsScreenState extends State<GoalsScreen> {
       actions: [
         TextButton(
           onPressed: () async {
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Remove goal?'),
+                content: Text('Archive “${nameCtrl.text.trim().isEmpty ? 'this goal' : nameCtrl.text.trim()}”?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text(
+                      'Delete',
+                      style: TextStyle(color: Color(0xFFC53030)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+            if (confirmed != true || !mounted) return;
             final ok = await _ctrl.remove(id);
             if (!mounted) return;
             Navigator.pop(context);

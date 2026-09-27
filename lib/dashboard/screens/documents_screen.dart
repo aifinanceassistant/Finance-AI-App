@@ -160,6 +160,31 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                                       );
                                     },
                               onDelete: () async {
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('Remove document?'),
+                                    content: Text('Remove ${d.filename}?'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, true),
+                                        child: const Text(
+                                          'Remove',
+                                          style: TextStyle(
+                                            color: Color(0xFFC53030),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirmed != true || !mounted) return;
                                 final ok = await _ctrl.deleteDocument(d.id);
                                 if (!mounted) return;
                                 if (!ok) {

@@ -427,6 +427,27 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
       actions: [
         TextButton(
           onPressed: () async {
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Remove holding?'),
+                content: Text('Remove $id from this space?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text(
+                      'Delete',
+                      style: TextStyle(color: Color(0xFFC53030)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+            if (confirmed != true || !mounted) return;
             final ok = await _ctrl.remove(id);
             if (!mounted) return;
             Navigator.pop(context);

@@ -674,9 +674,16 @@ class LinkAction extends StatelessWidget {
 }
 
 class StatusPill extends StatelessWidget {
-  const StatusPill({super.key, required this.status});
+  const StatusPill({
+    super.key,
+    required this.status,
+    this.recurring = false,
+  });
 
   final TxnStatus status;
+  /// When true, map transaction statuses to recurring labels
+  /// (Active / Paused / Ended).
+  final bool recurring;
 
   @override
   Widget build(BuildContext context) {
@@ -684,18 +691,24 @@ class StatusPill extends StatelessWidget {
       TxnStatus.succeeded => (
           context.dashSuccessFill,
           AppColors.success,
-          'Succeeded',
+          recurring ? 'Active' : 'Succeeded',
         ),
       TxnStatus.pending => (
           context.dashWarningFill,
           AppColors.warning,
-          'Pending',
+          recurring ? 'Paused' : 'Pending',
         ),
-      TxnStatus.failed => (
-          context.dashDangerFill,
-          AppColors.danger,
-          'Failed',
-        ),
+      TxnStatus.failed => recurring
+          ? (
+              const Color(0xFFF0F3F7),
+              const Color(0xFF697386),
+              'Ended',
+            )
+          : (
+              context.dashDangerFill,
+              AppColors.danger,
+              'Failed',
+            ),
     };
 
     return Container(

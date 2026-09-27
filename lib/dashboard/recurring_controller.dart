@@ -46,19 +46,32 @@ class RecurringController extends ChangeNotifier {
   }
 
   /// Roll a stored next_date forward until on/after today (display-only).
-  static String _upcomingIso(String nextDate, String cadence) {
+  /// Returns null when the series has no remaining occurrence.
+  static String? _upcomingIso(
+    String nextDate,
+    String cadence, {
+    String? endDate,
+    int? remainingOccurrences,
+  }) {
+    if (remainingOccurrences != null && remainingOccurrences <= 0) return null;
     final now = DateTime.now().toUtc();
     final asOf =
         '${now.year.toString().padLeft(4, '0')}-'
         '${now.month.toString().padLeft(2, '0')}-'
         '${now.day.toString().padLeft(2, '0')}';
+    final endYmd = (endDate != null && endDate.length >= 10)
+        ? endDate.substring(0, 10)
+        : '';
     var cur = nextDate.length >= 10 ? nextDate.substring(0, 10) : nextDate;
-    if (cur.isEmpty) return asOf;
+    if (cur.isEmpty) cur = asOf;
+    if (endYmd.isNotEmpty && cur.compareTo(endYmd) > 0) return null;
     if (cur.compareTo(asOf) >= 0) return cur;
     for (var i = 0; i < 240; i++) {
       cur = _advanceIso(cur, cadence);
+      if (endYmd.isNotEmpty && cur.compareTo(endYmd) > 0) return null;
       if (cur.compareTo(asOf) >= 0) return cur;
     }
+    if (endYmd.isNotEmpty && cur.compareTo(endYmd) > 0) return null;
     return cur;
   }
 
@@ -113,7 +126,16 @@ class RecurringController extends ChangeNotifier {
     final originalCurrencyRaw =
         (json['originalCurrency'] as String?)?.trim().toUpperCase();
     final cadence = (json['cadence'] as String?) ?? 'Monthly';
-    final nextIso = _upcomingIso(nextDate, cadence);
+    final remaining = (json['remainingOccurrences'] as num?)?.toInt();
+    final status = _uiStatus(json['status'] as String?);
+    final nextIso = status == TxnStatus.failed
+        ? null
+        : _upcomingIso(
+            nextDate,
+            cadence,
+            endDate: endDate,
+            remainingOccurrences: remaining,
+          );
     return DemoRecurring(
       id: json['id'] as String? ?? '',
       name: name,
@@ -121,10 +143,10 @@ class RecurringController extends ChangeNotifier {
       account: (json['account'] as String?)?.trim() ?? '—',
       amount: amount,
       cadence: cadence,
-      next: _displayDate(nextIso),
+      next: nextIso == null ? '—' : _displayDate(nextIso),
       start: _displayDate(startDate ?? nextDate),
       end: endDate == null || endDate.isEmpty ? '' : _displayDate(endDate),
-      status: _uiStatus(json['status'] as String?),
+      status: status,
       type: _uiType(json['type'] as String?, amount, category, name),
       originalAmount: originalAmount,
       originalCurrency:

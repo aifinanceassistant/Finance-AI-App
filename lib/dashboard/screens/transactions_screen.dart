@@ -1159,6 +1159,29 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         visualDensity: VisualDensity.compact,
                         icon: const Icon(Icons.delete_outline, size: 18),
                         onPressed: () async {
+                          final confirmed = await showDialog<bool>(
+                            context: ctx,
+                            builder: (dialogCtx) => AlertDialog(
+                              title: const Text('Remove document?'),
+                              content: Text('Remove ${d.filename}?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(dialogCtx, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(dialogCtx, true),
+                                  child: const Text(
+                                    'Remove',
+                                    style: TextStyle(color: Color(0xFFC53030)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmed != true || !ctx.mounted) return;
                           final ok = await _ctrl.deleteDocument(d.id);
                           if (!ctx.mounted) return;
                           if (!ok) {

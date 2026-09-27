@@ -1100,6 +1100,31 @@ class _AccountsScreenState extends State<AccountsScreen> {
       return;
     }
     if (action == 'remove') {
+      final label =
+          a.displayName.trim().isNotEmpty ? a.displayName : 'this connection';
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Remove connection?'),
+          content: Text(
+            'Remove $label? This unlinks the account from this space.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text(
+                'Remove',
+                style: TextStyle(color: AppColors.danger),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
       final ok = await _ctrl.remove(key);
       if (!mounted) return;
       toast(context, ok ? 'Connection removed' : 'Could not remove');
