@@ -25,18 +25,38 @@ import 'users_permissions_screen.dart';
 const _appVersion = '26.9.8+1521 (Build: 981)';
 
 const _sections = [
-  ('general', 'General'),
-  ('profile', 'Profile'),
-  ('preferences', 'Preferences'),
-  ('users-permissions', 'Users & permissions'),
-  ('mcp-keys', 'MCP & API keys'),
-  ('account', 'Account'),
-  ('security', 'Security'),
-  ('plan', 'Plan'),
-  ('subscription', 'Subscription'),
-  ('banks', 'Banks'),
-  ('privacy', 'Privacy'),
-  ('about', 'About'),
+  (
+    'general',
+    'General',
+    'theme appearance language budget cutover',
+  ),
+  ('profile', 'Profile', 'name email phone photo avatar'),
+  (
+    'preferences',
+    'Preferences',
+    'currency timezone date format space switcher',
+  ),
+  (
+    'users-permissions',
+    'Users & permissions',
+    'team members invite roles access',
+  ),
+  ('mcp-keys', 'MCP & API keys', 'api key claude connector token'),
+  ('account', 'Account', 'delete export download data'),
+  (
+    'security',
+    'Security',
+    'password 2fa mfa authenticator sessions',
+  ),
+  ('plan', 'Plan', 'stripe upgrade pricing checkout billing'),
+  (
+    'subscription',
+    'Subscription',
+    'billing invoice payment cancel portal',
+  ),
+  ('banks', 'Banks', 'plaid link connect institution'),
+  ('privacy', 'Privacy', 'gdpr choices cookies legal'),
+  ('about', 'About', 'version help support terms'),
 ];
 
 const _languages = [
@@ -89,6 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _nameCtrl = TextEditingController(text: 'Alex Rivera');
   final _emailCtrl = TextEditingController(text: 'alex@financeai.app');
   final _phoneCtrl = TextEditingController(text: '+1 (415) 555-0142');
+  final _searchCtrl = TextEditingController();
   String _initials = 'AR';
   String _currency = 'USD';
   bool _digest = true;
@@ -105,6 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _planSubtitle = 'Start a free trial to unlock Plus';
   bool _subscriptionActive = false;
   bool _billingLoaded = false;
+  String _search = '';
   bool _twoFaOn = false;
   String _spaceSwitcher = 'tabs';
   List<String> _tags = ['Business'];
@@ -373,6 +395,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -380,8 +403,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() {});
   }
 
+  List<(String, String, String)> get _visibleSections {
+    final q = _search.trim().toLowerCase();
+    if (q.isEmpty) return _sections;
+    return [
+      for (final s in _sections)
+        if ('${s.$1} ${s.$2} ${s.$3}'.toLowerCase().contains(q)) s,
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
+    final visible = _visibleSections;
     return DashModalScaffold(
       body: ListView(
         padding: const EdgeInsets.only(bottom: 28),
@@ -391,42 +424,97 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: 'Account, plan, privacy, and connections',
             showPrimary: false,
           ),
-          for (final s in _sections)
-            Theme(
-              data: Theme.of(context).copyWith(
-                dividerColor: Colors.transparent,
-                splashColor: Colors.transparent,
-                highlightColor: Colors.transparent,
-              ),
-              child: ExpansionTile(
-                key: PageStorageKey<String>('settings-stack-${s.$1}'),
-                initiallyExpanded: false,
-                maintainState: true,
-                tilePadding: const EdgeInsets.symmetric(horizontal: 20),
-                childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                backgroundColor: Colors.transparent,
-                collapsedBackgroundColor: Colors.transparent,
-                shape: Border(
-                  bottom: BorderSide(color: context.dashLine),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+            child: TextField(
+              controller: _searchCtrl,
+              onChanged: (v) => setState(() => _search = v),
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Search settings',
+                prefixIcon: Icon(
+                  Icons.search,
+                  size: 20,
+                  color: context.dashSoftMute,
                 ),
-                collapsedShape: Border(
-                  bottom: BorderSide(color: context.dashLine),
+                suffixIcon: _search.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() => _search = '');
+                        },
+                      ),
+                filled: true,
+                fillColor: context.dashPanel,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
                 ),
-                iconColor: context.dashMute,
-                collapsedIconColor: context.dashMute,
-                textColor: context.dashInk,
-                collapsedTextColor: context.dashInk,
-                title: Text(
-                  s.$2,
-                  style: TextStyle(
-                    color: context.dashInk,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: context.dashLine),
                 ),
-                children: [_bodyFor(s.$1)],
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: context.dashLine),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppColors.brand),
+                ),
               ),
             ),
+          ),
+          if (visible.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+              child: Text(
+                'No settings match “${_search.trim()}”',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.dashSoftMute, fontSize: 13),
+              ),
+            )
+          else
+            for (final s in visible)
+              Theme(
+                data: Theme.of(context).copyWith(
+                  dividerColor: Colors.transparent,
+                  splashColor: Colors.transparent,
+                  highlightColor: Colors.transparent,
+                ),
+                child: ExpansionTile(
+                  key: PageStorageKey<String>(
+                    'settings-stack-${s.$1}-${_search.isEmpty ? 'all' : 'q'}',
+                  ),
+                  initiallyExpanded: _search.trim().isNotEmpty,
+                  maintainState: true,
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 20),
+                  childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                  backgroundColor: Colors.transparent,
+                  collapsedBackgroundColor: Colors.transparent,
+                  shape: Border(
+                    bottom: BorderSide(color: context.dashLine),
+                  ),
+                  collapsedShape: Border(
+                    bottom: BorderSide(color: context.dashLine),
+                  ),
+                  iconColor: context.dashMute,
+                  collapsedIconColor: context.dashMute,
+                  textColor: context.dashInk,
+                  collapsedTextColor: context.dashInk,
+                  title: Text(
+                    s.$2,
+                    style: TextStyle(
+                      color: context.dashInk,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  children: [_bodyFor(s.$1)],
+                ),
+              ),
         ],
       ),
     );
