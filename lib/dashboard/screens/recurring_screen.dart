@@ -686,8 +686,8 @@ class _RecurringScreenState extends State<RecurringScreen> {
 
     await showDashSheet<void>(
       context: context,
-      title: 'Recurring calendar',
-      description: 'Upcoming charges and deposits by date',
+      title: 'Upcoming transactions',
+      description: 'Next charge or deposit for each series by date',
       builder: (ctx, setSheetState) {
         if (groups.isEmpty) {
           return Padding(
@@ -834,7 +834,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
             extraActions: [
               IconButton(
                 onPressed: _openCalendarSheet,
-                tooltip: 'Calendar',
+                tooltip: 'Upcoming transactions',
                 icon: const Icon(Icons.calendar_month_outlined, size: 22),
                 color: context.dashInk,
                 visualDensity: VisualDensity.compact,

@@ -110,6 +110,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _emailCtrl = TextEditingController(text: 'alex@financeai.app');
   final _phoneCtrl = TextEditingController(text: '+1 (415) 555-0142');
   final _searchCtrl = TextEditingController();
+  final _listScrollCtrl = ScrollController();
+  final Map<String, GlobalKey> _sectionKeys = {
+    for (final s in _sections) s.$1: GlobalKey(),
+  };
+  final Map<String, ExpansibleController> _sectionControllers = {
+    for (final s in _sections) s.$1: ExpansibleController(),
+  };
   String _initials = 'AR';
   String _currency = 'USD';
   bool _digest = true;
@@ -127,6 +134,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _subscriptionActive = false;
   bool _billingLoaded = false;
   String _search = '';
+  String? _jumpSection;
   bool _twoFaOn = false;
   String _spaceSwitcher = 'tabs';
   List<String> _tags = ['Business'];
@@ -396,6 +404,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
     _searchCtrl.dispose();
+    _listScrollCtrl.dispose();
+    for (final c in _sectionControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -403,20 +415,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() {});
   }
 
-  List<(String, String, String)> get _visibleSections {
-    final q = _search.trim().toLowerCase();
-    if (q.isEmpty) return _sections;
-    return [
-      for (final s in _sections)
-        if ('${s.$1} ${s.$2} ${s.$3}'.toLowerCase().contains(q)) s,
-    ];
+  String? _matchSectionId(String raw) {
+    final q = raw.trim().toLowerCase();
+    if (q.isEmpty) return null;
+    for (final s in _sections) {
+      if ('${s.$1} ${s.$2} ${s.$3}'.toLowerCase().contains(q)) return s.$1;
+    }
+    return null;
+  }
+
+  void _onSearchChanged(String v) {
+    final match = _matchSectionId(v);
+    setState(() {
+      _search = v;
+      _jumpSection = match;
+    });
+    if (match == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _sectionControllers[match]?.expand();
+      final ctx = _sectionKeys[match]?.currentContext;
+      if (ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.08,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final visible = _visibleSections;
+    final q = _search.trim();
+    final hasMatch = q.isEmpty || _jumpSection != null;
     return DashModalScaffold(
       body: ListView(
+        controller: _listScrollCtrl,
         padding: const EdgeInsets.only(bottom: 28),
         children: [
           const DashFeedChrome(
@@ -428,7 +463,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
             child: TextField(
               controller: _searchCtrl,
-              onChanged: (v) => setState(() => _search = v),
+              onChanged: _onSearchChanged,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: 'Search settings',
@@ -443,7 +478,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         icon: const Icon(Icons.close, size: 18),
                         onPressed: () {
                           _searchCtrl.clear();
-                          setState(() => _search = '');
+                          setState(() {
+                            _search = '';
+                            _jumpSection = null;
+                          });
                         },
                       ),
                 filled: true,
@@ -467,7 +505,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-          if (visible.isEmpty)
+          if (!hasMatch)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
               child: Text(
@@ -475,20 +513,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: context.dashSoftMute, fontSize: 13),
               ),
-            )
-          else
-            for (final s in visible)
-              Theme(
+            ),
+          for (final s in _sections)
+            Opacity(
+              opacity: q.isNotEmpty && _jumpSection != null && _jumpSection != s.$1
+                  ? 0.45
+                  : 1,
+              child: Theme(
                 data: Theme.of(context).copyWith(
                   dividerColor: Colors.transparent,
                   splashColor: Colors.transparent,
                   highlightColor: Colors.transparent,
                 ),
                 child: ExpansionTile(
-                  key: PageStorageKey<String>(
-                    'settings-stack-${s.$1}-${_search.isEmpty ? 'all' : 'q'}',
-                  ),
-                  initiallyExpanded: _search.trim().isNotEmpty,
+                  key: _sectionKeys[s.$1],
+                  controller: _sectionControllers[s.$1],
+                  initiallyExpanded: s.$1 == widget.initialSection,
                   maintainState: true,
                   tilePadding: const EdgeInsets.symmetric(horizontal: 20),
                   childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
@@ -515,6 +555,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [_bodyFor(s.$1)],
                 ),
               ),
+            ),
         ],
       ),
     );
@@ -653,7 +694,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           const _BlockTitle('Statement cutover'),
           Text(
-            'Statement uploads ignore transactions on or before this date, so your manually entered history stays untouched. Turn off auto-post on recurring items that also arrive by statement.',
+            'Statement uploads and bank sync ignore transactions on or before this date, so your manually entered history stays untouched.',
             style: TextStyle(color: context.dashMute, fontSize: 12, height: 1.4),
           ),
           _SettingsRow(

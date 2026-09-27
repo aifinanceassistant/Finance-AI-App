@@ -25,6 +25,43 @@ class RecurringController extends ChangeNotifier {
   bool get loading => _loading;
   String get spaceId => _spaceId;
 
+  static String _advanceIso(String iso, String cadence) {
+    final raw = iso.length >= 10 ? iso.substring(0, 10) : iso;
+    final d = DateTime.tryParse(raw);
+    if (d == null) return DateTime.now().toUtc().toIso8601String().substring(0, 10);
+    final key = cadence.trim().toLowerCase();
+    late final DateTime next;
+    if (key == 'weekly') {
+      next = d.add(const Duration(days: 7));
+    } else if (key == 'biweekly' || key == 'bi-weekly') {
+      next = d.add(const Duration(days: 14));
+    } else if (key == 'quarterly') {
+      next = DateTime.utc(d.year, d.month + 3, d.day);
+    } else if (key == 'yearly' || key == 'annual') {
+      next = DateTime.utc(d.year + 1, d.month, d.day);
+    } else {
+      next = DateTime.utc(d.year, d.month + 1, d.day);
+    }
+    return next.toIso8601String().substring(0, 10);
+  }
+
+  /// Roll a stored next_date forward until on/after today (display-only).
+  static String _upcomingIso(String nextDate, String cadence) {
+    final now = DateTime.now().toUtc();
+    final asOf =
+        '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+    var cur = nextDate.length >= 10 ? nextDate.substring(0, 10) : nextDate;
+    if (cur.isEmpty) return asOf;
+    if (cur.compareTo(asOf) >= 0) return cur;
+    for (var i = 0; i < 240; i++) {
+      cur = _advanceIso(cur, cadence);
+      if (cur.compareTo(asOf) >= 0) return cur;
+    }
+    return cur;
+  }
+
   static String _displayDate(String? iso) {
     if (iso == null || iso.isEmpty) return '';
     final raw = iso.length >= 10 ? iso.substring(0, 10) : iso;
@@ -40,7 +77,8 @@ class RecurringController extends ChangeNotifier {
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
-    return '${months[d.month - 1]} ${d.day}';
+    final year = d.year != now.year ? ', ${d.year}' : '';
+    return '${months[d.month - 1]} ${d.day}$year';
   }
 
   static TxnStatus _uiStatus(String? status) {
@@ -74,14 +112,16 @@ class RecurringController extends ChangeNotifier {
     final originalAmount = (json['originalAmount'] as num?)?.toDouble();
     final originalCurrencyRaw =
         (json['originalCurrency'] as String?)?.trim().toUpperCase();
+    final cadence = (json['cadence'] as String?) ?? 'Monthly';
+    final nextIso = _upcomingIso(nextDate, cadence);
     return DemoRecurring(
       id: json['id'] as String? ?? '',
       name: name,
       category: category,
       account: (json['account'] as String?)?.trim() ?? '—',
       amount: amount,
-      cadence: (json['cadence'] as String?) ?? 'Monthly',
-      next: _displayDate(nextDate),
+      cadence: cadence,
+      next: _displayDate(nextIso),
       start: _displayDate(startDate ?? nextDate),
       end: endDate == null || endDate.isEmpty ? '' : _displayDate(endDate),
       status: _uiStatus(json['status'] as String?),
