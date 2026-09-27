@@ -22,6 +22,7 @@ import 'recurring_controller.dart';
 import 'recurring_scope.dart';
 import 'screens/accounts_screen.dart';
 import 'screens/categories_screen.dart';
+import 'screens/documents_screen.dart';
 import 'screens/goals_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/investments_screen.dart';
@@ -276,6 +277,8 @@ class _DashboardShellState extends State<DashboardShell>
         _openInvestments();
       case CommandPage.recurring:
         _openRecurring();
+      case CommandPage.documents:
+        _openDocuments();
       case CommandPage.team:
         _openUsersPermissions();
     }
@@ -342,6 +345,24 @@ class _DashboardShellState extends State<DashboardShell>
             child: DashStyleScope(
               style: style,
               child: const ReportsScreen(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openDocuments() {
+    final style = DashVariantStyle.of(context);
+    final transactions = _transactions ?? TransactionsController.fake();
+    Navigator.of(context).push(
+      dashModalRoute<void>(
+        builder: (_) => _withSpaces(
+          TransactionsScope(
+            controller: transactions,
+            child: DashStyleScope(
+              style: style,
+              child: const DocumentsScreen(),
             ),
           ),
         ),
@@ -660,6 +681,7 @@ class _DashboardShellState extends State<DashboardShell>
         onInvestments: _openInvestments,
         onGoals: _openGoals,
         onReports: _openReports,
+        onDocuments: _openDocuments,
         onSettings: _openSettings,
         onUsersPermissions: _openUsersPermissions,
         onManagePlan: () => _openSettings(section: 'plan'),

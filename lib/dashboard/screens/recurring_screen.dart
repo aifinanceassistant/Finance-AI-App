@@ -66,6 +66,21 @@ final _detectedSamples = [
   ),
 ];
 
+Widget _autoApplySwitch({
+  required bool value,
+  required ValueChanged<bool> onChanged,
+}) {
+  return SwitchListTile(
+    contentPadding: EdgeInsets.zero,
+    title: const Text('Auto-post to transactions'),
+    subtitle: const Text(
+      'FinanceAI adds this to your transactions on each due date. Leave off if it already comes in from a linked bank or statement upload, or you\'ll see it twice.',
+    ),
+    value: value,
+    onChanged: onChanged,
+  );
+}
+
 String _statusLabel(TxnStatus status) {
   switch (status) {
     case TxnStatus.succeeded:
@@ -202,6 +217,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
     var cadence = 'Monthly';
     var type = MoneyMove.expense;
     var currency = DisplayCurrency.code;
+    var autoApply = false;
     var fieldErrors = <String, String?>{};
     void Function(VoidCallback)? setLocal;
 
@@ -331,6 +347,11 @@ class _RecurringScreenState extends State<RecurringScreen> {
               hint: 'YYYY-MM-DD',
               errorText: fieldErrors['next'],
             ),
+            const SizedBox(height: 8),
+            _autoApplySwitch(
+              value: autoApply,
+              onChanged: (v) => setSheetState(() => autoApply = v),
+            ),
           ],
         );
       },
@@ -387,6 +408,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
                 end: endCtrl.text.trim(),
                 type: type,
                 currency: currency,
+                autoApply: autoApply,
               );
               if (!mounted) return;
               if (created == null) {
@@ -425,6 +447,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
         )
         ? (item.originalCurrency ?? DisplayCurrency.code).toUpperCase()
         : DisplayCurrency.code;
+    var autoApply = item.autoApply;
     var fieldErrors = <String, String?>{};
     void Function(VoidCallback)? setLocal;
 
@@ -536,7 +559,12 @@ class _RecurringScreenState extends State<RecurringScreen> {
               hint: 'YYYY-MM-DD',
               errorText: fieldErrors['next'],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            _autoApplySwitch(
+              value: autoApply,
+              onChanged: (v) => setSheetState(() => autoApply = v),
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -631,6 +659,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
                 'cadence': cadence,
                 'type': moneyMoveLabel(type),
                 'currency': currency,
+                'autoApply': autoApply,
               });
               if (!mounted) return;
               if (updated == null) {
@@ -901,14 +930,41 @@ class _RecurringRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      item.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: context.dashInk,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            item.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: context.dashInk,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (item.autoApply) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: context.dashBrandFill,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Text(
+                              'Auto-posts',
+                              style: TextStyle(
+                                color: AppColors.brand,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(

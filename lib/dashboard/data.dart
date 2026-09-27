@@ -350,6 +350,7 @@ class DemoRecurring {
     this.status = TxnStatus.succeeded,
     this.originalAmount,
     this.originalCurrency,
+    this.autoApply = false,
     MoneyMove? type,
   }) : type = type ?? inferMoneyMove(amount, category, name);
 
@@ -368,6 +369,7 @@ class DemoRecurring {
   final MoneyMove type;
   final double? originalAmount;
   final String? originalCurrency;
+  final bool autoApply;
 
   String get endLabel => end.trim().isEmpty ? 'Ongoing' : end;
 
@@ -385,6 +387,7 @@ class DemoRecurring {
     MoneyMove? type,
     double? originalAmount,
     String? originalCurrency,
+    bool? autoApply,
   }) {
     return DemoRecurring(
       id: id ?? this.id,
@@ -400,6 +403,7 @@ class DemoRecurring {
       type: type ?? this.type,
       originalAmount: originalAmount ?? this.originalAmount,
       originalCurrency: originalCurrency ?? this.originalCurrency,
+      autoApply: autoApply ?? this.autoApply,
     );
   }
 }

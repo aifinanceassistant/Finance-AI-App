@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -483,7 +484,58 @@ class AuthController extends ChangeNotifier {
         error: 'Network error — check your connection',
       );
     }
+    return _decodeResponse(res, method);
+  }
 
+  /// Uploads a single file as multipart/form-data (POST) with the same auth
+  /// and error handling as [apiRequest].
+  Future<ApiResult> apiMultipart(
+    String path, {
+    required String field,
+    required String filename,
+    required List<int> bytes,
+    String? contentType,
+    Map<String, String>? fields,
+  }) async {
+    if (isFake) return (ok: fakeSucceed, data: null, error: null);
+    final base = AppEnv.appUrl;
+    if (base.isEmpty) {
+      return (ok: false, data: null, error: 'App URL is not configured');
+    }
+    final token = _client?.auth.currentSession?.accessToken;
+    if (token == null) {
+      return (ok: false, data: null, error: 'You are signed out');
+    }
+
+    final request = http.MultipartRequest('POST', Uri.parse('$base$path'))
+      ..headers['Authorization'] = 'Bearer $token'
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          field,
+          bytes,
+          filename: filename,
+          contentType:
+              contentType == null ? null : MediaType.parse(contentType),
+        ),
+      );
+    if (fields != null) {
+      request.fields.addAll(fields);
+    }
+
+    late http.Response res;
+    try {
+      res = await http.Response.fromStream(await request.send());
+    } catch (_) {
+      return (
+        ok: false,
+        data: null,
+        error: 'Network error — check your connection',
+      );
+    }
+    return _decodeResponse(res, 'POST');
+  }
+
+  ApiResult _decodeResponse(http.Response res, String method) {
     Object? decoded;
     if (res.body.isNotEmpty && res.body != 'null') {
       try {

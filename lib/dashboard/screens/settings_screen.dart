@@ -96,8 +96,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _card = '4242';
   bool _budgeting = true;
   bool _rollover = false;
-  bool _recurringAutoApply = false;
   bool _transactionsFoldingMode = true;
+  bool _isAdmin = false;
+  String? _statementCutoverDate;
   bool _shareAnalytics = false;
   String _planId = 'team';
   String _planLabel = 'No active plan';
@@ -149,9 +150,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final data = await auth.apiDecode('GET', '/api/profile');
     if (!mounted || data is! Map<String, dynamic>) return;
     setState(() {
-      if (data['recurringAutoApply'] is bool) {
-        _recurringAutoApply = data['recurringAutoApply'] as bool;
-      }
+      final role = (data['role'] as String?)?.trim().toLowerCase() ?? '';
+      _isAdmin = const {'admin', 'superadmin', 'owner'}.contains(role);
+      final cutover = data['statementCutoverDate'];
+      _statementCutoverDate =
+          cutover is String && cutover.isNotEmpty ? cutover : null;
       if (data['transactionsFoldingMode'] is bool) {
         _transactionsFoldingMode = data['transactionsFoldingMode'] as bool;
       }
@@ -288,14 +291,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _refreshFxRate(auth, value);
   }
 
-  Future<void> _setRecurringAutoApply(bool value) async {
-    setState(() => _recurringAutoApply = value);
-    final auth = AuthScope.read(context);
-    await auth.apiDecode(
+  Future<void> _setStatementCutover(String? value) async {
+    final previous = _statementCutoverDate;
+    if (value == previous) return;
+    setState(() => _statementCutoverDate = value);
+    final res = await AuthScope.read(context).apiRequest(
       'PATCH',
       '/api/profile',
-      body: {'recurringAutoApply': value},
+      body: {'statementCutoverDate': value},
     );
+    if (!mounted || res.ok) return;
+    setState(() => _statementCutoverDate = previous);
+    toast(context, res.error ?? 'Could not save cutover date');
+  }
+
+  Future<void> _pickStatementCutover() async {
+    final current = _statementCutoverDate == null
+        ? null
+        : DateTime.tryParse(_statementCutoverDate!);
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current ?? now,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(now.year + 1, 12, 31),
+      helpText: 'Statement cutover',
+    );
+    if (picked == null || !mounted) return;
+    final iso =
+        '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+    await _setStatementCutover(iso);
   }
 
   Future<void> _setTransactionsFoldingMode(bool value) async {
@@ -536,20 +561,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
           value: _rollover,
           onChanged: (v) => setState(() => _rollover = v),
         ),
-        const SizedBox(height: 8),
-        const _BlockTitle('Recurring'),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Recurring transactions auto apply'),
-          subtitle: const Text(
-            'Post due recurring rules when you open Transactions or Recurring, and on the scheduled cron',
+        if (_isAdmin) ...[
+          const SizedBox(height: 8),
+          const _BlockTitle('Statement cutover'),
+          Text(
+            'Statement uploads ignore transactions on or before this date, so your manually entered history stays untouched. Turn off auto-post on recurring items that also arrive by statement.',
+            style: TextStyle(color: context.dashMute, fontSize: 12, height: 1.4),
           ),
-          value: _recurringAutoApply,
-          onChanged: (v) {
-            // ignore: discarded_futures
-            _setRecurringAutoApply(v);
-          },
-        ),
+          _SettingsRow(
+            title: 'Cutover date',
+            body: _statementCutoverDate ?? 'Not set',
+            showDivider: false,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_statementCutoverDate != null) ...[
+                  LinkAction(
+                    label: 'Clear',
+                    onTap: () {
+                      // ignore: discarded_futures
+                      _setStatementCutover(null);
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                LinkAction(
+                  label: _statementCutoverDate == null ? 'Set' : 'Change',
+                  onTap: () {
+                    // ignore: discarded_futures
+                    _pickStatementCutover();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 8),
         const _BlockTitle('Transactions'),
         SwitchListTile(

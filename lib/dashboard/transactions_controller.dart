@@ -4,6 +4,55 @@ import '../auth/auth_controller.dart';
 import 'data.dart';
 import 'fx_prefetch.dart';
 
+class TxnDocument {
+  const TxnDocument({
+    required this.id,
+    required this.filename,
+    required this.kind,
+    this.url,
+    this.byteSize,
+    this.transactionId,
+    this.transactionDescription,
+    this.transactionDate,
+    this.transactionAmount,
+  });
+
+  final String id;
+  final String filename;
+  final String kind;
+  final String? url;
+  final int? byteSize;
+  final String? transactionId;
+  final String? transactionDescription;
+  final String? transactionDate;
+  final double? transactionAmount;
+
+  String get kindLabel => switch (kind) {
+        'invoice' => 'Invoice',
+        'bill' => 'Bill',
+        'other' => 'Other',
+        _ => 'Receipt',
+      };
+
+  static TxnDocument fromJson(Map<String, dynamic> json) {
+    return TxnDocument(
+      id: json['id'] as String? ?? '',
+      filename: (json['filename'] as String?)?.trim() ?? 'Document',
+      kind: (json['kind'] as String?) ?? 'receipt',
+      url: json['url'] as String?,
+      byteSize: (json['byteSize'] as num?)?.toInt(),
+      transactionId: json['transactionId'] as String?,
+      transactionDescription: json['transactionDescription'] as String?,
+      transactionDate: json['transactionDate'] is String
+          ? (json['transactionDate'] as String).length >= 10
+              ? (json['transactionDate'] as String).substring(0, 10)
+              : json['transactionDate'] as String
+          : null,
+      transactionAmount: (json['transactionAmount'] as num?)?.toDouble(),
+    );
+  }
+}
+
 class TransactionsController extends ChangeNotifier {
   TransactionsController(this._auth);
 
@@ -313,6 +362,74 @@ class TransactionsController extends ChangeNotifier {
     _txns = _txns.where((t) => t.id != id).toList();
     notifyListeners();
     return true;
+  }
+
+  Future<List<TxnDocument>> listDocuments(String transactionId) async {
+    if (_auth.isFake) return const [];
+    final decoded = await _auth.apiDecode(
+      'GET',
+      '/api/transactions/$transactionId/documents',
+    );
+    if (decoded is! List) return const [];
+    return [
+      for (final item in decoded)
+        if (item is Map<String, dynamic>) TxnDocument.fromJson(item),
+    ];
+  }
+
+  Future<List<TxnDocument>> listSpaceDocuments(String spaceId) async {
+    if (_auth.isFake || spaceId.isEmpty) return const [];
+    final decoded = await _auth.apiDecode(
+      'GET',
+      '/api/documents?portfolio_id=${Uri.encodeQueryComponent(spaceId)}',
+    );
+    if (decoded is! List) return const [];
+    return [
+      for (final item in decoded)
+        if (item is Map<String, dynamic>) TxnDocument.fromJson(item),
+    ];
+  }
+
+  Future<({TxnDocument? doc, String? error})> uploadDocument({
+    required String transactionId,
+    required String filename,
+    required List<int> bytes,
+    String kind = 'receipt',
+  }) async {
+    final ext = filename.contains('.')
+        ? filename.split('.').last.toLowerCase()
+        : '';
+    final contentType = switch (ext) {
+      'pdf' => 'application/pdf',
+      'png' => 'image/png',
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'webp' => 'image/webp',
+      'gif' => 'image/gif',
+      'heic' || 'heif' => 'image/heic',
+      _ => null,
+    };
+    final res = await _auth.apiMultipart(
+      '/api/transactions/$transactionId/documents',
+      field: 'file',
+      filename: filename,
+      bytes: bytes,
+      contentType: contentType,
+      fields: {'kind': kind},
+    );
+    if (!res.ok) {
+      return (doc: null, error: res.error ?? 'Could not attach document');
+    }
+    final data = res.data;
+    return (
+      doc: data is Map<String, dynamic> ? TxnDocument.fromJson(data) : null,
+      error: null,
+    );
+  }
+
+  Future<bool> deleteDocument(String id) async {
+    if (_auth.isFake) return true;
+    final res = await _auth.apiRequest('DELETE', '/api/documents/$id');
+    return res.ok;
   }
 
   Future<void> _processDueIfNeeded(String spaceId) async {

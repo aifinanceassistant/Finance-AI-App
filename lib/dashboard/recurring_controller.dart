@@ -91,6 +91,7 @@ class RecurringController extends ChangeNotifier {
           originalCurrencyRaw != null && originalCurrencyRaw.isNotEmpty
               ? originalCurrencyRaw
               : null,
+      autoApply: json['autoApply'] == true,
     );
   }
 
@@ -145,6 +146,7 @@ class RecurringController extends ChangeNotifier {
     required String end,
     required MoneyMove type,
     String? currency,
+    bool autoApply = false,
   }) async {
     if (_spaceId.isEmpty) return null;
     final code = (currency ?? DisplayCurrency.code).toUpperCase();
@@ -164,6 +166,7 @@ class RecurringController extends ChangeNotifier {
         type: type,
         originalAmount: amount.abs(),
         originalCurrency: code,
+        autoApply: autoApply,
       );
       _items = [..._items, row];
       notifyListeners();
@@ -186,6 +189,7 @@ class RecurringController extends ChangeNotifier {
         'type': _dbType(type),
         'status': 'Pending',
         'currency': code,
+        'autoApply': autoApply,
       },
     );
     if (decoded is! Map<String, dynamic>) return null;
@@ -221,6 +225,7 @@ class RecurringController extends ChangeNotifier {
         originalAmount: (body['amount'] as num?)?.toDouble().abs() ??
             t.originalAmount,
         originalCurrency: currency ?? t.originalCurrency,
+        autoApply: body['autoApply'] as bool? ?? t.autoApply,
       );
       _items = [..._items]..[idx] = updated;
       notifyListeners();

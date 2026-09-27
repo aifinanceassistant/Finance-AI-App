@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../theme/app_theme.dart';
 import '../dash_colors.dart';
@@ -906,11 +908,55 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       category = categoryOptions.first;
     }
 
+    var docs = await _ctrl.listDocuments(txn.id);
+    if (!mounted) return;
+    var kind = 'receipt';
+    var uploading = false;
+
     await showDashSheet<void>(
       context: context,
       title: txn.merchant,
       description: '${txn.account} · ${txn.date}',
       builder: (ctx, setSheetState) {
+        Future<void> attach() async {
+          final file = await FilePicker.pickFile(
+            type: FileType.custom,
+            allowedExtensions: const [
+              'pdf',
+              'png',
+              'jpg',
+              'jpeg',
+              'webp',
+              'gif',
+              'heic',
+              'heif',
+            ],
+          );
+          if (file == null || !ctx.mounted) return;
+          final bytes = await file.readAsBytes();
+          if (bytes.length > 10 * 1024 * 1024) {
+            toast(context, 'File too large (max 10 MB)');
+            return;
+          }
+          setSheetState(() => uploading = true);
+          final result = await _ctrl.uploadDocument(
+            transactionId: txn.id,
+            filename: file.name,
+            bytes: bytes,
+            kind: kind,
+          );
+          if (!ctx.mounted) return;
+          setSheetState(() => uploading = false);
+          if (result.error != null) {
+            toast(context, result.error!);
+            return;
+          }
+          if (result.doc != null) {
+            setSheetState(() => docs = [result.doc!, ...docs]);
+            toast(context, 'Document attached');
+          }
+        }
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1003,6 +1049,131 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 },
               ),
             ],
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Documents',
+                    style: TextStyle(
+                      color: context.dashInk,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 110,
+                  child: DashDropdown<String>(
+                    value: kind,
+                    items: const ['receipt', 'invoice', 'bill', 'other'],
+                    labelOf: (k) => switch (k) {
+                      'invoice' => 'Invoice',
+                      'bill' => 'Bill',
+                      'other' => 'Other',
+                      _ => 'Receipt',
+                    },
+                    onChanged: (v) => setSheetState(() => kind = v),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GhostButton(
+                  label: uploading ? '…' : 'Attach',
+                  onPressed: uploading ? null : () {
+                    // ignore: discarded_futures
+                    attach();
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'PDF or image · max 10 MB',
+              style: TextStyle(color: context.dashSoftMute, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            if (docs.isEmpty)
+              Text(
+                'No documents yet',
+                style: TextStyle(color: context.dashSoftMute, fontSize: 13),
+              )
+            else
+              for (final d in docs)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: context.dashLine),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.attach_file,
+                        size: 16,
+                        color: context.dashSoftMute,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: InkWell(
+                          onTap: d.url == null
+                              ? null
+                              : () async {
+                                  final uri = Uri.tryParse(d.url!);
+                                  if (uri == null) return;
+                                  await launchUrl(
+                                    uri,
+                                    mode: LaunchMode.externalApplication,
+                                  );
+                                },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                d.filename,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: d.url != null
+                                      ? AppColors.brand
+                                      : context.dashInk,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              Text(
+                                d.kindLabel,
+                                style: TextStyle(
+                                  color: context.dashSoftMute,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        onPressed: () async {
+                          final ok = await _ctrl.deleteDocument(d.id);
+                          if (!ctx.mounted) return;
+                          if (!ok) {
+                            toast(context, 'Could not remove document');
+                            return;
+                          }
+                          setSheetState(
+                            () =>
+                                docs = docs.where((x) => x.id != d.id).toList(),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
           ],
         );
       },

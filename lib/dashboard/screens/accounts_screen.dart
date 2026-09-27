@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -13,6 +14,7 @@ import '../filter_sort.dart';
 import '../form_validation.dart';
 import '../shimmer.dart';
 import '../spaces_scope.dart';
+import '../transactions_scope.dart';
 import '../ui.dart';
 
 const _filterFields = [
@@ -768,6 +770,19 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 );
               },
             ),
+            if (account.id != null) ...[
+              const SizedBox(height: 10),
+              GhostButton(
+                label: AccountsController.canUploadStatement(account)
+                    ? 'Statements & uploads'
+                    : 'Statements',
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  // ignore: discarded_futures
+                  _openStatementsSheet(account);
+                },
+              ),
+            ],
           ],
         );
       },
@@ -777,6 +792,216 @@ class _AccountsScreenState extends State<AccountsScreen> {
     nameCtrl.dispose();
     last4Ctrl.dispose();
     balanceCtrl.dispose();
+  }
+
+  Future<void> _reloadAfterImport() async {
+    final spaceId = _ctrl.spaceId;
+    final txns =
+        context.getInheritedWidgetOfExactType<TransactionsScope>()?.notifier;
+    await Future.wait([
+      _ctrl.loadForSpace(spaceId),
+      if (txns != null) txns.loadForSpace(spaceId),
+    ]);
+  }
+
+  Future<bool> _uploadStatement(DemoAccount a) async {
+    final id = a.id;
+    if (id == null) return false;
+    final PlatformFile? file;
+    try {
+      file = await FilePicker.pickFile(
+        dialogTitle: 'Choose a statement',
+        type: FileType.custom,
+        allowedExtensions: const ['csv', 'ofx', 'qfx', 'pdf'],
+      );
+    } catch (e) {
+      if (mounted) toast(context, 'Could not open files');
+      return false;
+    }
+    if (file == null || !mounted) return false;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return false;
+    if (bytes.length > 10 * 1024 * 1024) {
+      toast(context, 'Statements must be 10 MB or smaller');
+      return false;
+    }
+
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            content: Row(
+              children: [
+                const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.4),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Importing statement…',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'PDFs can take up to a minute.',
+                        style: TextStyle(
+                          color: ctx.dashMute,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final res = await _ctrl.uploadStatement(
+      accountId: id,
+      filename: file.name,
+      bytes: bytes,
+    );
+    if (!mounted) return false;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (res.error != null) {
+      toast(context, res.error!);
+      return false;
+    }
+    final summary = res.result?.summaryLabel;
+    toast(context, summary == null ? 'Statement imported' : 'Imported: $summary');
+    await _reloadAfterImport();
+    return true;
+  }
+
+  Future<bool> _confirmDeleteStatement(StatementImport s) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete statement?'),
+        content: Text(
+          'Removes ${s.filename} and its import record. Imported transactions stay in your ledger.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _openStatementsSheet(DemoAccount a) async {
+    final id = a.id;
+    if (id == null) return;
+    final canUpload = AccountsController.canUploadStatement(a);
+    List<StatementImport>? items;
+    var open = true;
+    void Function(VoidCallback)? setLocal;
+
+    Future<void> reload() async {
+      final next = await _ctrl.listStatements(id);
+      if (open) setLocal?.call(() => items = next);
+    }
+
+    unawaited(reload());
+
+    await showDashSheet<void>(
+      context: context,
+      title: 'Statements',
+      description: canUpload
+          ? 'Upload CSV, OFX/QFX, or PDF statements for ${a.displayName}.'
+          : '${a.displayName} syncs from your bank automatically.',
+      builder: (ctx, setSheetState) {
+        setLocal = setSheetState;
+        final list = items;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (list == null)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                  ),
+                ),
+              )
+            else if (list.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  'No statements uploaded yet',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: ctx.dashSoftMute, fontSize: 13),
+                ),
+              )
+            else
+              for (final s in list)
+                _StatementRow(
+                  item: s,
+                  onDelete: () async {
+                    if (!await _confirmDeleteStatement(s)) return;
+                    final ok = await _ctrl.deleteStatement(s.id);
+                    if (!mounted) return;
+                    if (!ok) {
+                      toast(context, 'Could not delete statement');
+                      return;
+                    }
+                    if (open) {
+                      setLocal?.call(
+                        () => items = [
+                          for (final i in items ?? const <StatementImport>[])
+                            if (i.id != s.id) i,
+                        ],
+                      );
+                    }
+                    toast(context, 'Statement deleted');
+                  },
+                ),
+          ],
+        );
+      },
+      actions: [
+        Expanded(
+          child: GhostButton(
+            label: 'Close',
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        if (canUpload)
+          Expanded(
+            child: AccentButton(
+              label: 'Upload statement',
+              onPressed: () async {
+                if (await _uploadStatement(a)) await reload();
+              },
+            ),
+          ),
+      ],
+    );
+    open = false;
   }
 
   Future<void> _accountRowActions(DemoAccount a) async {
@@ -796,6 +1021,18 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 title: const Text('Edit'),
                 onTap: () => Navigator.pop(ctx, 'edit'),
               ),
+              if (AccountsController.canUploadStatement(a))
+                ListTile(
+                  leading: const Icon(Icons.upload_file_outlined),
+                  title: const Text('Upload statement'),
+                  onTap: () => Navigator.pop(ctx, 'upload'),
+                ),
+              if (a.id != null)
+                ListTile(
+                  leading: const Icon(Icons.description_outlined),
+                  title: const Text('Statements'),
+                  onTap: () => Navigator.pop(ctx, 'statements'),
+                ),
               if (a.provider == 'plaid') ...[
                 ListTile(
                   leading: const Icon(Icons.sync_rounded),
@@ -834,6 +1071,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
     final key = AccountsController.accountKey(a);
     if (action == 'edit') {
       await _openEditSheet(a);
+      return;
+    }
+    if (action == 'upload') {
+      await _uploadStatement(a);
+      return;
+    }
+    if (action == 'statements') {
+      await _openStatementsSheet(a);
       return;
     }
     if (action == 'sync') {
@@ -1004,6 +1249,76 @@ class _AccountsScreenState extends State<AccountsScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _StatementRow extends StatelessWidget {
+  const _StatementRow({required this.item, required this.onDelete});
+
+  final StatementImport item;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final period = item.periodLabel;
+    final detail = item.failed
+        ? (item.error ?? 'Import failed')
+        : item.summaryLabel;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: context.dashLine)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.filename,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.dashInk,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  [
+                    ?period,
+                    item.failed ? 'Failed' : 'Imported',
+                  ].join(' · '),
+                  style: TextStyle(
+                    color: item.failed ? AppColors.danger : context.dashMute,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: TextStyle(
+                    color: item.failed ? AppColors.danger : context.dashSoftMute,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: onDelete,
+            tooltip: 'Delete statement',
+            icon: const Icon(Icons.delete_outline_rounded, size: 20),
+            color: context.dashMute,
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
       ),
     );
   }

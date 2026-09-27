@@ -6,6 +6,88 @@ import 'form_validation.dart';
 import 'fx_prefetch.dart';
 import '../providers/plaid_link_flow.dart';
 
+class StatementImport {
+  const StatementImport({
+    required this.id,
+    required this.filename,
+    required this.status,
+    this.periodStart,
+    this.periodEnd,
+    this.added = 0,
+    this.matched = 0,
+    this.removed = 0,
+    this.skipped = 0,
+    this.transfers = 0,
+    this.balanceUpdated = false,
+    this.error,
+  });
+
+  final String id;
+  final String filename;
+  final String status;
+  final String? periodStart;
+  final String? periodEnd;
+  final int added;
+  final int matched;
+  final int removed;
+  final int skipped;
+  final int transfers;
+  final bool balanceUpdated;
+  final String? error;
+
+  bool get failed => status == 'failed';
+
+  String? get periodLabel {
+    final start = periodStart;
+    final end = periodEnd;
+    if (start == null && end == null) return null;
+    if (start == null || end == null || start == end) return start ?? end;
+    return '$start – $end';
+  }
+
+  String get summaryLabel {
+    final parts = <String>[
+      '$added new',
+      if (matched > 0) '$matched already there',
+      if (removed > 0) '$removed removed',
+    ];
+    var label = parts.join(', ');
+    if (transfers > 0) {
+      label += ' · $transfers transfer${transfers == 1 ? '' : 's'}';
+    }
+    if (skipped > 0) label += ' · skipped $skipped before cutover';
+    if (balanceUpdated) label += ' · balance updated';
+    return label;
+  }
+
+  static StatementImport fromJson(Map<String, dynamic> json) {
+    final summary = json['summary'] is Map
+        ? json['summary'] as Map
+        : const <String, dynamic>{};
+    int count(String key) => (summary[key] as num?)?.toInt() ?? 0;
+    String? date(String key) {
+      final raw = json[key];
+      if (raw is! String || raw.isEmpty) return null;
+      return raw.length >= 10 ? raw.substring(0, 10) : raw;
+    }
+
+    return StatementImport(
+      id: json['id'] as String? ?? '',
+      filename: (json['filename'] as String?)?.trim() ?? 'Statement',
+      status: (json['status'] as String?) ?? 'committed',
+      periodStart: date('periodStart'),
+      periodEnd: date('periodEnd'),
+      added: count('added'),
+      matched: count('matched'),
+      removed: count('removed'),
+      skipped: count('skipped'),
+      transfers: count('transfers'),
+      balanceUpdated: summary['balanceUpdated'] == true,
+      error: json['error'] as String?,
+    );
+  }
+}
+
 class AccountsController extends ChangeNotifier {
   AccountsController(this._auth);
 
@@ -29,6 +111,11 @@ class AccountsController extends ChangeNotifier {
   String get spaceId => _spaceId;
 
   static String accountKey(DemoAccount a) => a.id ?? '${a.bank}-${a.number}';
+
+  /// Connected Plaid accounts sync from the bank; the API rejects uploads.
+  static bool canUploadStatement(DemoAccount a) =>
+      a.id != null &&
+      !(a.provider == 'plaid' && a.status == TxnStatus.succeeded);
 
   void _publish({bool? loading}) {
     if (loading != null) _loading = loading;
@@ -428,6 +515,55 @@ class AccountsController extends ChangeNotifier {
             ],
           ),
     ].where((e) => e.name.isNotEmpty).toList();
+  }
+
+  Future<List<StatementImport>> listStatements(String accountId) async {
+    if (_auth.isFake) return const [];
+    final decoded =
+        await _auth.apiDecode('GET', '/api/accounts/$accountId/statements');
+    if (decoded is! List) return const [];
+    return [
+      for (final item in decoded)
+        if (item is Map<String, dynamic>) StatementImport.fromJson(item),
+    ];
+  }
+
+  Future<({StatementImport? result, String? error})> uploadStatement({
+    required String accountId,
+    required String filename,
+    required List<int> bytes,
+  }) async {
+    final ext = filename.contains('.')
+        ? filename.split('.').last.toLowerCase()
+        : '';
+    final contentType = switch (ext) {
+      'csv' => 'text/csv',
+      'ofx' => 'application/x-ofx',
+      'qfx' => 'application/x-qfx',
+      'pdf' => 'application/pdf',
+      _ => null,
+    };
+    final res = await _auth.apiMultipart(
+      '/api/accounts/$accountId/statements',
+      field: 'file',
+      filename: filename,
+      bytes: bytes,
+      contentType: contentType,
+    );
+    if (!res.ok) {
+      return (result: null, error: res.error ?? 'Could not import statement');
+    }
+    final data = res.data;
+    return (
+      result: data is Map<String, dynamic> ? StatementImport.fromJson(data) : null,
+      error: null,
+    );
+  }
+
+  Future<bool> deleteStatement(String id) async {
+    if (_auth.isFake) return true;
+    final res = await _auth.apiRequest('DELETE', '/api/statements/$id');
+    return res.ok;
   }
 
   Future<DemoAccount?> update({

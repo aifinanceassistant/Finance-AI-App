@@ -30,6 +30,7 @@ enum CommandPage {
   goals,
   investments,
   recurring,
+  documents,
   team,
 }
 
@@ -544,6 +545,12 @@ const _pages = <_PageDef>[
     label: 'Recurring',
     icon: Icons.autorenew_rounded,
     page: CommandPage.recurring,
+  ),
+  _PageDef(
+    name: 'documents',
+    label: 'Documents',
+    icon: Icons.attach_file_rounded,
+    page: CommandPage.documents,
   ),
   _PageDef(
     name: 'team',
