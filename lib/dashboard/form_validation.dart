@@ -73,7 +73,7 @@ String? accountBalanceAmount(Object? value, String type) {
 
 /// Signed balance for local/API storage.
 double signedAccountBalance(String type, double balance) {
-  if (type == 'Credit') return -balance.abs();
+  if (type == 'Credit' || type == 'Loan') return -balance.abs();
   if (type == 'IOU') return balance;
   return balance.abs();
 }

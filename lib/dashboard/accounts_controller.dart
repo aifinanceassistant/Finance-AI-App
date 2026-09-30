@@ -152,10 +152,19 @@ class AccountsController extends ChangeNotifier {
     final defaultCurrencyRaw =
         (json['defaultCurrency'] as String?)?.trim().toUpperCase();
     final connected = json['connected'] == true;
-    final signedUsd = type == 'Credit' ? -balance.abs() : balance;
+    final signedUsd =
+        (type == 'Credit' || type == 'Loan') ? -balance.abs() : balance;
     final signedOriginal = originalBalance == null
         ? null
-        : (type == 'Credit' ? -originalBalance.abs() : originalBalance);
+        : ((type == 'Credit' || type == 'Loan')
+            ? -originalBalance.abs()
+            : originalBalance);
+    final creditLimitRaw = (json['creditLimit'] as num?)?.toDouble();
+    final creditLimit = creditLimitRaw != null &&
+            creditLimitRaw.isFinite &&
+            creditLimitRaw > 0
+        ? creditLimitRaw
+        : null;
     return DemoAccount(
       id: json['id'] as String?,
       bank: institution.isEmpty ? name : institution,
@@ -173,6 +182,7 @@ class AccountsController extends ChangeNotifier {
           defaultCurrencyRaw != null && defaultCurrencyRaw.isNotEmpty
               ? defaultCurrencyRaw
               : null,
+      creditLimit: type == 'Credit' ? creditLimit : null,
       status: connected ? TxnStatus.succeeded : TxnStatus.failed,
       synced: (json['provider'] as String?) == 'plaid'
           ? _syncLabel(json['lastSyncedAt'] as String?)
@@ -227,10 +237,17 @@ class AccountsController extends ChangeNotifier {
     required String lastFour,
     required double balance,
     String? defaultCurrency,
+    double? creditLimit,
   }) async {
     if (_spaceId.isEmpty) return null;
     final nickname = (name ?? '').trim().isEmpty ? institution : name!.trim();
     final code = (defaultCurrency ?? DisplayCurrency.code).toUpperCase();
+    final limit = type == 'Credit' &&
+            creditLimit != null &&
+            creditLimit.isFinite &&
+            creditLimit > 0
+        ? creditLimit
+        : null;
 
     if (_auth.isFake) {
       final account = DemoAccount(
@@ -244,6 +261,7 @@ class AccountsController extends ChangeNotifier {
         originalBalance: signedAccountBalance(type, balance),
         originalCurrency: code,
         defaultCurrency: code,
+        creditLimit: limit,
         status: TxnStatus.succeeded,
         synced: 'Just now',
       );
@@ -252,19 +270,22 @@ class AccountsController extends ChangeNotifier {
       return account;
     }
 
+    final body = <String, dynamic>{
+      'portfolioId': _spaceId,
+      'name': nickname,
+      'institution': institution,
+      'type': type,
+      'balance': apiAccountBalance(type, balance),
+      'lastFour': lastFour,
+      'connected': true,
+      'defaultCurrency': code,
+    };
+    if (limit != null) body['creditLimit'] = limit;
+
     final decoded = await _auth.apiDecode(
       'POST',
       '/api/accounts',
-      body: {
-        'portfolioId': _spaceId,
-        'name': nickname,
-        'institution': institution,
-        'type': type,
-        'balance': apiAccountBalance(type, balance),
-        'lastFour': lastFour,
-        'connected': true,
-        'defaultCurrency': code,
-      },
+      body: body,
     );
     if (decoded is! Map<String, dynamic>) return null;
     final account = fromJson(decoded);
@@ -574,11 +595,18 @@ class AccountsController extends ChangeNotifier {
     required String lastFour,
     required double balance,
     String? defaultCurrency,
+    double? creditLimit,
   }) async {
     final target = _findByKey(key);
     if (target == null) return null;
     final nickname = (name ?? '').trim().isEmpty ? institution : name!.trim();
     final code = (defaultCurrency ?? target.nativeCurrency).toUpperCase();
+    final limit = type == 'Credit' &&
+            creditLimit != null &&
+            creditLimit.isFinite &&
+            creditLimit > 0
+        ? creditLimit
+        : null;
 
     if (_auth.isFake || target.id == null) {
       final updated = target.copyWith(
@@ -591,6 +619,8 @@ class AccountsController extends ChangeNotifier {
         originalBalance: signedAccountBalance(type, balance),
         originalCurrency: code,
         defaultCurrency: code,
+        creditLimit: limit,
+        clearCreditLimit: limit == null,
       );
       _accounts = [
         for (final a in _accounts)
@@ -610,6 +640,7 @@ class AccountsController extends ChangeNotifier {
         'lastFour': lastFour,
         'balance': apiAccountBalance(type, balance),
         'defaultCurrency': code,
+        'creditLimit': type == 'Credit' ? limit : null,
       },
     );
     if (decoded is! Map<String, dynamic>) return null;

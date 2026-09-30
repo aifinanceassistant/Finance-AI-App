@@ -115,6 +115,7 @@ class DemoAccount {
     this.originalBalance,
     this.originalCurrency,
     this.defaultCurrency,
+    this.creditLimit,
     required this.status,
     required this.synced,
     this.provider = 'manual',
@@ -134,6 +135,8 @@ class DemoAccount {
   final double? originalBalance;
   final String? originalCurrency;
   final String? defaultCurrency;
+  /// Credit card limit in the account's native currency (Credit only).
+  final double? creditLimit;
   final TxnStatus status;
   final String synced;
   final String provider;
@@ -170,6 +173,8 @@ class DemoAccount {
     double? originalBalance,
     String? originalCurrency,
     String? defaultCurrency,
+    double? creditLimit,
+    bool clearCreditLimit = false,
     TxnStatus? status,
     String? synced,
     String? provider,
@@ -186,6 +191,7 @@ class DemoAccount {
       originalBalance: originalBalance ?? this.originalBalance,
       originalCurrency: originalCurrency ?? this.originalCurrency,
       defaultCurrency: defaultCurrency ?? this.defaultCurrency,
+      creditLimit: clearCreditLimit ? null : (creditLimit ?? this.creditLimit),
       status: status ?? this.status,
       synced: synced ?? this.synced,
       provider: provider ?? this.provider,

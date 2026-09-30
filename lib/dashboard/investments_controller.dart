@@ -81,6 +81,21 @@ class InvestmentsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Soft-refresh market quotes then reload holdings (non-blocking caller).
+  Future<void> refreshQuotes({bool force = false}) async {
+    if (_spaceId.isEmpty || _spaceId == 'pending' || _auth.isFake) return;
+    final forceQ = force ? '&force=1' : '';
+    try {
+      await _auth.apiDecode(
+        'POST',
+        '/api/investments/refresh-quotes?portfolio_id=${Uri.encodeQueryComponent(_spaceId)}$forceQ',
+      );
+    } catch (e) {
+      debugPrint('InvestmentsController.refreshQuotes: $e');
+    }
+    await loadForSpace(_spaceId);
+  }
+
   Future<DemoHolding?> create({
     required String name,
     required String ticker,

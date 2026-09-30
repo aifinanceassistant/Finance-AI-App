@@ -16,6 +16,8 @@ class MoreScreen extends StatelessWidget {
     required this.onGoals,
     required this.onReports,
     required this.onDocuments,
+    required this.onBills,
+    required this.onInvoices,
     required this.onSettings,
     required this.onManagePlan,
     required this.onLogout,
@@ -32,6 +34,8 @@ class MoreScreen extends StatelessWidget {
   final VoidCallback onGoals;
   final VoidCallback onReports;
   final VoidCallback onDocuments;
+  final VoidCallback onBills;
+  final VoidCallback onInvoices;
   final VoidCallback onSettings;
   final VoidCallback onManagePlan;
   final VoidCallback onLogout;
@@ -157,6 +161,16 @@ class MoreScreen extends StatelessWidget {
         icon: Icons.attach_file_rounded,
         title: 'Documents',
         onTap: onDocuments,
+      ),
+      _MoreDest(
+        icon: Icons.receipt_long_outlined,
+        title: 'Bills',
+        onTap: onBills,
+      ),
+      _MoreDest(
+        icon: Icons.request_quote_outlined,
+        title: 'Invoices',
+        onTap: onInvoices,
       ),
       _MoreDest(
         icon: Icons.smart_toy_outlined,

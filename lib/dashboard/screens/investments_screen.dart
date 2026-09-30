@@ -70,9 +70,23 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
   List<FilterRule> _filterRules = [];
   List<SortRule> _sortRules = [];
   String _search = '';
+  var _softRefreshStarted = false;
 
   InvestmentsController get _ctrl => InvestmentsScope.of(context);
   List<DemoHolding> get _holdings => _ctrl.holdings;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_softRefreshStarted) return;
+    _softRefreshStarted = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Soft quote refresh after initial holdings load (non-blocking).
+      // ignore: discarded_futures
+      _ctrl.refreshQuotes();
+    });
+  }
 
   List<String> _selectOptions(String field) {
     if (field == 'type') {
@@ -108,8 +122,10 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
       ..sort((a, b) => b.amount.compareTo(a.amount));
   }
 
-  void _syncBrokers() {
-    toast(context, 'Broker price sync isn’t available yet');
+  Future<void> _refreshPrices() async {
+    await _ctrl.refreshQuotes(force: true);
+    if (!mounted) return;
+    toast(context, 'Prices refreshed');
   }
 
   Future<void> _openAddHoldingSheet() async {
@@ -618,9 +634,9 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
           DashFeedChrome(
             title: 'Investments',
             subtitle: subtitle,
-            onSecondary: _syncBrokers,
+            onSecondary: _refreshPrices,
             secondaryIcon: Icons.sync_rounded,
-            secondaryTooltip: 'Sync brokers',
+            secondaryTooltip: 'Refresh prices',
             extraActions: [
               IconButton(
                 onPressed: _openAllocationSheet,

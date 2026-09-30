@@ -41,31 +41,6 @@ const _filterFields = [
 const _statusLabels = ['Active', 'Paused', 'Ended'];
 const _cadences = ['Weekly', 'Biweekly', 'Monthly', 'Quarterly', 'Yearly'];
 
-final _detectedSamples = [
-  DemoRecurring(
-    id: 'rec_detect_1',
-    name: 'iCloud+',
-    category: 'Software',
-    amount: -2.99,
-    cadence: 'Monthly',
-    next: 'Apr 18',
-    start: 'Apr 18, 2023',
-    account: 'Amex',
-    status: TxnStatus.pending,
-  ),
-  DemoRecurring(
-    id: 'rec_detect_2',
-    name: 'Spotify Duo',
-    category: 'Entertainment',
-    amount: -14.99,
-    cadence: 'Monthly',
-    next: 'Apr 22',
-    start: 'Sep 22, 2022',
-    account: 'Chase',
-    status: TxnStatus.succeeded,
-  ),
-];
-
 Widget _autoApplySwitch({
   required bool value,
   required ValueChanged<bool> onChanged,
@@ -175,36 +150,15 @@ class _RecurringScreenState extends State<RecurringScreen> {
     return Map.fromEntries(entries);
   }
 
-  Future<void> _detectMore() async {
-    final existing = _recurring.map((r) => r.name.toLowerCase()).toSet();
-    final samples = _detectedSamples
-        .where((s) => !existing.contains(s.name.toLowerCase()))
-        .toList();
-    if (samples.isEmpty) {
-      toast(context, 'Nothing new · no additional recurring charges detected');
-      return;
-    }
-    final added = <DemoRecurring>[];
-    for (final s in samples) {
-      final row = await _ctrl.create(
-        name: s.name,
-        category: s.category,
-        account: s.account,
-        amount: s.amount,
-        cadence: s.cadence,
-        next: s.next,
-        start: s.start,
-        end: s.end,
-        type: s.type,
-      );
-      if (row != null) added.add(row);
-    }
+  Future<void> _refreshFixes() async {
+    await _ctrl.loadFixes();
     if (!mounted) return;
+    final n = _ctrl.fixes.length;
     toast(
       context,
-      added.isEmpty
-          ? 'Could not add detected recurring'
-          : 'Detected recurring · ${added.map((a) => a.name).join(', ')}',
+      n == 0
+          ? 'No suggested fixes right now'
+          : '$n suggested fix${n == 1 ? '' : 'es'} from your transactions',
     );
   }
 
@@ -566,34 +520,6 @@ class _RecurringScreenState extends State<RecurringScreen> {
               value: autoApply,
               onChanged: (v) => setSheetState(() => autoApply = v),
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: GhostButton(
-                    label: 'Skip next',
-                    onPressed: () async {
-                      await _ctrl.skipNext(item.id);
-                      if (!mounted) return;
-                      Navigator.pop(context);
-                      toast(context, 'Skipped next · next charge date advanced');
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: GhostButton(
-                    label: 'Mark paid',
-                    onPressed: () async {
-                      await _ctrl.markPaid(item.id);
-                      if (!mounted) return;
-                      Navigator.pop(context);
-                      toast(context, 'Marked paid · next date advanced');
-                    },
-                  ),
-                ),
-              ],
-            ),
           ],
         );
       },
@@ -853,9 +779,9 @@ class _RecurringScreenState extends State<RecurringScreen> {
           DashFeedChrome(
             title: 'Recurring',
             subtitle: subtitle,
-            onSecondary: _detectMore,
+            onSecondary: _refreshFixes,
             secondaryIcon: Icons.auto_awesome_outlined,
-            secondaryTooltip: 'Detect more',
+            secondaryTooltip: 'Scan for fixes',
             extraActions: [
               IconButton(
                 onPressed: _openCalendarSheet,
@@ -885,6 +811,94 @@ class _RecurringScreenState extends State<RecurringScreen> {
               expandSearch: true,
             ),
           ),
+          if (_ctrl.fixesLoading || _ctrl.fixes.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: context.dashPanel,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: context.dashLine),
+                ),
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Suggested fixes',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: context.dashInk,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _ctrl.fixesLoading && _ctrl.fixes.isEmpty
+                          ? 'Scanning transactions…'
+                          : '${_ctrl.fixes.length} from your ledger',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.dashMute,
+                      ),
+                    ),
+                    for (final fix in _ctrl.fixes) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        fix.title,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: context.dashInk,
+                        ),
+                      ),
+                      Text(
+                        fix.detail,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.dashMute,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: AccentButton(
+                              label: 'Accept',
+                              onPressed: () async {
+                                final ok = await _ctrl.acceptFix(fix.id);
+                                if (!mounted) return;
+                                toast(
+                                  context,
+                                  ok
+                                      ? (fix.kind == 'add'
+                                          ? 'Recurring added'
+                                          : 'Recurring updated')
+                                      : 'Could not apply fix',
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: GhostButton(
+                              label: 'Dismiss',
+                              onPressed: () async {
+                                final ok = await _ctrl.dismissFix(fix.id);
+                                if (!mounted) return;
+                                toast(
+                                  context,
+                                  ok ? 'Dismissed' : 'Could not dismiss',
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           if (_ctrl.loading)
             const DashLoadingBody(kpiCount: 1, listRows: 5)
           else

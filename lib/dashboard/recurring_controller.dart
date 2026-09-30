@@ -4,6 +4,64 @@ import '../auth/auth_controller.dart';
 import 'data.dart';
 import 'fx_prefetch.dart';
 
+class RecurringFixItem {
+  const RecurringFixItem({
+    required this.id,
+    required this.kind,
+    required this.title,
+    required this.detail,
+    required this.suggestedName,
+    required this.suggestedMagnitude,
+    required this.suggestedCurrency,
+    required this.suggestedCadence,
+    required this.suggestedNextDate,
+    required this.suggestedStartDate,
+    required this.suggestedType,
+    this.suggestedAccountId,
+    this.suggestedCategoryId,
+    this.recurringId,
+  });
+
+  final String id;
+  final String kind;
+  final String title;
+  final String detail;
+  final String suggestedName;
+  final double suggestedMagnitude;
+  final String suggestedCurrency;
+  final String suggestedCadence;
+  final String suggestedNextDate;
+  final String suggestedStartDate;
+  final String suggestedType;
+  final String? suggestedAccountId;
+  final String? suggestedCategoryId;
+  final String? recurringId;
+
+  factory RecurringFixItem.fromJson(Map<String, dynamic> json) {
+    final suggested = json['suggested'] is Map<String, dynamic>
+        ? json['suggested'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    return RecurringFixItem(
+      id: json['id'] as String? ?? '',
+      kind: json['kind'] as String? ?? 'add',
+      title: json['title'] as String? ?? 'Suggestion',
+      detail: json['detail'] as String? ?? '',
+      suggestedName: suggested['name'] as String? ?? '',
+      suggestedMagnitude:
+          (suggested['magnitude'] as num?)?.toDouble() ?? 0,
+      suggestedCurrency:
+          (suggested['currency'] as String?)?.trim().toUpperCase() ?? 'USD',
+      suggestedCadence: suggested['cadence'] as String? ?? 'Monthly',
+      suggestedNextDate: suggested['nextDate'] as String? ?? '',
+      suggestedStartDate: suggested['startDate'] as String? ?? '',
+      suggestedType: suggested['type'] as String? ?? 'expense',
+      suggestedAccountId: suggested['accountId'] as String?,
+      suggestedCategoryId: suggested['categoryId'] as String?,
+      recurringId: json['recurringId'] as String?,
+    );
+  }
+}
+
 class RecurringController extends ChangeNotifier {
   RecurringController(this._auth);
 
@@ -18,11 +76,15 @@ class RecurringController extends ChangeNotifier {
   final AuthController _auth;
 
   List<DemoRecurring> _items = [];
+  List<RecurringFixItem> _fixes = [];
   String _spaceId = '';
   bool _loading = true;
+  bool _fixesLoading = false;
 
   List<DemoRecurring> get items => List.unmodifiable(_items);
+  List<RecurringFixItem> get fixes => List.unmodifiable(_fixes);
   bool get loading => _loading;
+  bool get fixesLoading => _fixesLoading;
   String get spaceId => _spaceId;
 
   static String _advanceIso(String iso, String cadence) {
@@ -189,12 +251,83 @@ class RecurringController extends ChangeNotifier {
       }
       _items = list;
       await prefetchFxRates(_auth, list.map((r) => r.originalCurrency));
+      await loadFixes();
     } catch (e) {
       debugPrint('RecurringController.load: $e');
       _items = [];
+      _fixes = [];
     }
     _loading = false;
     notifyListeners();
+  }
+
+  Future<void> loadFixes() async {
+    if (_auth.isFake || _spaceId.isEmpty || _spaceId == 'pending') {
+      _fixes = [];
+      _fixesLoading = false;
+      notifyListeners();
+      return;
+    }
+    _fixesLoading = true;
+    notifyListeners();
+    try {
+      final decoded = await _auth.apiDecode(
+        'GET',
+        '/api/recurring/fixes?portfolio_id=${Uri.encodeQueryComponent(_spaceId)}',
+      );
+      final list = <RecurringFixItem>[];
+      if (decoded is Map<String, dynamic> && decoded['fixes'] is List) {
+        for (final item in decoded['fixes'] as List) {
+          if (item is Map<String, dynamic>) {
+            list.add(RecurringFixItem.fromJson(item));
+          }
+        }
+      }
+      _fixes = list;
+    } catch (e) {
+      debugPrint('RecurringController.loadFixes: $e');
+      _fixes = [];
+    }
+    _fixesLoading = false;
+    notifyListeners();
+  }
+
+  Future<bool> acceptFix(String fixId) async {
+    if (_spaceId.isEmpty) return false;
+    if (_auth.isFake) {
+      _fixes = _fixes.where((f) => f.id != fixId).toList();
+      notifyListeners();
+      return true;
+    }
+    final decoded = await _auth.apiDecode(
+      'POST',
+      '/api/recurring/fixes',
+      body: {
+        'portfolioId': _spaceId,
+        'fixId': fixId,
+      },
+    );
+    if (decoded is! Map<String, dynamic>) return false;
+    final recurring = decoded['recurring'];
+    if (recurring is Map<String, dynamic>) {
+      final row = fromJson(recurring);
+      final idx = _items.indexWhere((r) => r.id == row.id);
+      if (idx >= 0) {
+        _items = [..._items]..[idx] = row;
+      } else {
+        _items = [..._items, row];
+      }
+      await prefetchFxRates(_auth, [row.originalCurrency]);
+    }
+    _fixes = _fixes.where((f) => f.id != fixId).toList();
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> dismissFix(String fixId) async {
+    _fixes = _fixes.where((f) => f.id != fixId).toList();
+    notifyListeners();
+    return true;
   }
 
   Future<DemoRecurring?> create({
@@ -304,14 +437,6 @@ class RecurringController extends ChangeNotifier {
     _items = [for (final r in _items) if (r.id == id) row else r];
     notifyListeners();
     return row;
-  }
-
-  Future<void> skipNext(String id) async {
-    await patch(id, {'advanceNext': true, 'skip': true});
-  }
-
-  Future<void> markPaid(String id) async {
-    await patch(id, {'advanceNext': true, 'markPaid': true});
   }
 
   Future<bool> remove(String id) async {

@@ -30,6 +30,7 @@ const _accountTypes = [
   'Checking',
   'Savings',
   'Credit',
+  'Loan',
   'Cash',
   'IOU',
   'Investment',
@@ -140,6 +141,57 @@ class _AccountsScreenState extends State<AccountsScreen> {
     return money(totalUsd);
   }
 
+  ({
+    double netWorth,
+    double creditUsed,
+    double creditLimit,
+    double creditAvailable,
+    double? utilizationPct,
+    bool hasCredit,
+    bool hasCreditLimits,
+  }) _creditStats(List<DemoAccount> accounts) {
+    var netWorth = 0.0;
+    var creditUsed = 0.0;
+    var creditUsedWithLimit = 0.0;
+    var creditLimit = 0.0;
+    var hasCredit = false;
+    var hasCreditLimits = false;
+
+    for (final a in accounts) {
+      netWorth += a.balance;
+      if (a.type != 'Credit') continue;
+      hasCredit = true;
+      final usedUsd = a.balance.abs();
+      creditUsed += usedUsd;
+      final limitRaw = a.creditLimit;
+      if (limitRaw == null || !limitRaw.isFinite || limitRaw <= 0) continue;
+      hasCreditLimits = true;
+      creditUsedWithLimit += usedUsd;
+      // Normalize limit to USD via cached FX rates.
+      creditLimit += DisplayCurrency.convertViaUsd(
+        limitRaw,
+        a.nativeCurrency,
+        'USD',
+      );
+    }
+
+    final available =
+        (creditLimit - creditUsedWithLimit).clamp(0.0, double.infinity);
+    final utilization = hasCreditLimits && creditLimit > 0
+        ? (creditUsedWithLimit / creditLimit) * 100
+        : null;
+
+    return (
+      netWorth: netWorth,
+      creditUsed: creditUsed,
+      creditLimit: creditLimit,
+      creditAvailable: available.toDouble(),
+      utilizationPct: utilization,
+      hasCredit: hasCredit,
+      hasCreditLimits: hasCreditLimits,
+    );
+  }
+
   Future<void> _refreshAll() async {
     await _ctrl.syncAll();
     if (!mounted) return;
@@ -155,6 +207,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
     final nameCtrl = TextEditingController();
     final last4Ctrl = TextEditingController();
     final balanceCtrl = TextEditingController(text: '0');
+    final creditLimitCtrl = TextEditingController();
     String? institution;
     var method = 'choose'; // choose | plaid | manual
     var otherOpen = false;
@@ -544,7 +597,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
               errorText: fieldErrors['lastFour'],
             ),
             const SizedBox(height: 14),
-            const DashFieldLabel('Starting balance'),
+            DashFieldLabel(
+              type == 'Credit' || type == 'Loan'
+                  ? 'Amount owed'
+                  : 'Starting balance',
+            ),
             Row(
               children: [
                 Expanded(
@@ -570,6 +627,20 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 ),
               ],
             ),
+            if (type == 'Credit') ...[
+              const SizedBox(height: 14),
+              const DashFieldLabel('Credit limit'),
+              DashTextField(
+                controller: creditLimitCtrl,
+                hint: 'Optional',
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                ],
+                errorText: fieldErrors['creditLimit'],
+              ),
+            ],
           ],
         );
       },
@@ -590,10 +661,16 @@ class _AccountsScreenState extends State<AccountsScreen> {
               final institutionErr = requiredText(trimmed, 'Institution');
               final lastFourErr = optionalLastFour(last4Ctrl.text);
               final balanceErr = accountBalanceAmount(balanceCtrl.text, type);
+              String? limitErr;
+              final limitRaw = creditLimitCtrl.text.trim();
+              if (type == 'Credit' && limitRaw.isNotEmpty) {
+                limitErr = nonNegativeAmount(limitRaw, 'Credit limit');
+              }
               final errors = <String, String?>{
                 if (institutionErr != null) 'institution': institutionErr,
                 if (lastFourErr != null) 'lastFour': lastFourErr,
                 if (balanceErr != null) 'balance': balanceErr,
+                if (limitErr != null) 'creditLimit': limitErr,
               };
               setLocal?.call(() => fieldErrors = errors);
               if (hasFieldErrors(errors)) {
@@ -609,6 +686,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
               }
               final digits = last4Ctrl.text.replaceAll(RegExp(r'\D'), '');
               final last4 = digits; // empty OK; else exactly 4 (validated)
+              final limitNum = double.tryParse(limitRaw);
               final created = await _ctrl.create(
                 institution: trimmed,
                 name: nameCtrl.text.trim(),
@@ -616,6 +694,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 lastFour: last4,
                 balance: double.tryParse(balanceCtrl.text) ?? 0,
                 defaultCurrency: currency,
+                creditLimit: type == 'Credit' ? limitNum : null,
               );
               if (!mounted) return;
               if (created == null) {
@@ -635,6 +714,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
     nameCtrl.dispose();
     last4Ctrl.dispose();
     balanceCtrl.dispose();
+    creditLimitCtrl.dispose();
     debounce?.cancel();
   }
 
@@ -651,9 +731,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
         : _accountTypes.first;
     final nativeBal = account.originalBalance ?? account.balance;
     final balanceCtrl = TextEditingController(
-      text: type == 'Credit'
+      text: (type == 'Credit' || type == 'Loan')
           ? nativeBal.abs().toStringAsFixed(2)
           : nativeBal.toStringAsFixed(2),
+    );
+    final creditLimitCtrl = TextEditingController(
+      text: account.creditLimit != null && account.creditLimit! > 0
+          ? account.creditLimit!.toStringAsFixed(2)
+          : '',
     );
     var currency = kSupportedCurrencies.contains(account.nativeCurrency)
         ? account.nativeCurrency
@@ -699,7 +784,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
               errorText: fieldErrors['lastFour'],
             ),
             const SizedBox(height: 14),
-            const DashFieldLabel('Balance'),
+            DashFieldLabel(
+              type == 'Credit' || type == 'Loan' ? 'Amount owed' : 'Balance',
+            ),
             Row(
               children: [
                 Expanded(
@@ -726,6 +813,20 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 ),
               ],
             ),
+            if (type == 'Credit') ...[
+              const SizedBox(height: 14),
+              const DashFieldLabel('Credit limit'),
+              DashTextField(
+                controller: creditLimitCtrl,
+                hint: 'Optional',
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                ],
+                errorText: fieldErrors['creditLimit'],
+              ),
+            ],
             const SizedBox(height: 18),
             AccentButton(
               label: 'Save',
@@ -734,10 +835,16 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 final institutionErr = requiredText(trimmed, 'Institution');
                 final lastFourErr = optionalLastFour(last4Ctrl.text);
                 final balanceErr = accountBalanceAmount(balanceCtrl.text, type);
+                String? limitErr;
+                final limitRaw = creditLimitCtrl.text.trim();
+                if (type == 'Credit' && limitRaw.isNotEmpty) {
+                  limitErr = nonNegativeAmount(limitRaw, 'Credit limit');
+                }
                 final errors = <String, String?>{
                   if (institutionErr != null) 'institution': institutionErr,
                   if (lastFourErr != null) 'lastFour': lastFourErr,
                   if (balanceErr != null) 'balance': balanceErr,
+                  if (limitErr != null) 'creditLimit': limitErr,
                 };
                 setSheetState(() => fieldErrors = errors);
                 if (hasFieldErrors(errors)) {
@@ -750,6 +857,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 final digits = last4Ctrl.text.replaceAll(RegExp(r'\D'), '');
                 final last4 = digits;
                 final key = AccountsController.accountKey(account);
+                final limitNum = double.tryParse(limitRaw);
                 final updated = await _ctrl.update(
                   key: key,
                   institution: trimmed,
@@ -758,6 +866,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   lastFour: last4,
                   balance: double.tryParse(balanceCtrl.text) ?? 0,
                   defaultCurrency: currency,
+                  creditLimit: type == 'Credit' ? limitNum : null,
                 );
                 if (!ctx.mounted) return;
                 Navigator.pop(ctx);
@@ -792,6 +901,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
     nameCtrl.dispose();
     last4Ctrl.dispose();
     balanceCtrl.dispose();
+    creditLimitCtrl.dispose();
   }
 
   Future<void> _reloadAfterImport() async {
@@ -1135,6 +1245,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
   Widget build(BuildContext context) {
     final filtered = _filtered;
     final total = filtered.fold<double>(0, (s, a) => s + a.balance);
+    final stats = _creditStats(filtered);
     final loading = _ctrl.loading;
     final canWrite =
         SpacesScope.maybeOf(context)?.can('accounts', 'write') != false;
@@ -1158,7 +1269,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           onPrimary: _openConnectSheet,
           primaryTooltip: 'Connect bank',
           primaryEnabled: canWrite,
-          metaLine: 'Total ${money(total)}',
+          metaLine: 'Net worth ${money(stats.netWorth)} · Total ${money(total)}',
           filterBar: FilterSortBar(
             fields: _filterFields,
             rules: _filterRules,
@@ -1175,6 +1286,49 @@ class _AccountsScreenState extends State<AccountsScreen> {
             expandSearch: true,
           ),
         ),
+        if (!loading && stats.hasCredit)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: DashPanel(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Credit used ${money(stats.creditUsed)}',
+                    style: TextStyle(
+                      color: context.dashMute,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (stats.hasCreditLimits) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Limit ${money(stats.creditLimit)} · Available ${money(stats.creditAvailable)}'
+                      '${stats.utilizationPct != null ? ' · ${stats.utilizationPct!.toStringAsFixed(0)}% used' : ''}',
+                      style: TextStyle(
+                        color: context.dashSoftMute,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ] else
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Set a credit limit on a card to see available credit',
+                        style: TextStyle(
+                          color: context.dashSoftMute,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
         if (loading)
           const DashLoadingBody(kpiCount: 1, listRows: 5)
         else
@@ -1235,6 +1389,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
 
   Widget _buildAccountRow(DemoAccount a) {
     final bal = a.originalBalance ?? a.balance;
+    final limit = a.type == 'Credit' &&
+            a.creditLimit != null &&
+            a.creditLimit! > 0
+        ? a.creditLimit
+        : null;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1250,15 +1409,29 @@ class _AccountsScreenState extends State<AccountsScreen> {
           child: Row(
             children: [
               Expanded(
-                child: Text(
-                  a.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: context.dashInk,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      a.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: context.dashInk,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (limit != null)
+                      Text(
+                        'Limit ${moneyNative(limit, a.nativeCurrency)}',
+                        style: TextStyle(
+                          color: context.dashSoftMute,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(width: 10),

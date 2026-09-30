@@ -21,17 +21,21 @@ import 'notifications_center.dart';
 import 'recurring_controller.dart';
 import 'recurring_scope.dart';
 import 'screens/accounts_screen.dart';
+import 'screens/bills_screen.dart';
 import 'screens/categories_screen.dart';
 import 'screens/documents_screen.dart';
 import 'screens/goals_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/investments_screen.dart';
+import 'screens/invoices_screen.dart';
 import 'screens/more_screen.dart';
 import 'screens/recurring_screen.dart';
 import 'screens/reports_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/transactions_screen.dart';
 import 'screens/users_permissions_screen.dart';
+import 'bills_controller.dart';
+import 'invoices_controller.dart';
 import 'space_switcher_bar.dart';
 import 'spaces.dart';
 import 'spaces_scope.dart';
@@ -370,6 +374,52 @@ class _DashboardShellState extends State<DashboardShell>
     );
   }
 
+  void _openBills() {
+    final style = DashVariantStyle.of(context);
+    final auth = AuthScope.of(context);
+    final bills = BillsController(auth);
+    final spaceId = _spaces?.spaceId ?? '';
+    // ignore: discarded_futures
+    bills.loadForSpace(spaceId);
+    final accounts = _accounts;
+    Navigator.of(context).push(
+      dashModalRoute<void>(
+        builder: (_) => _withSpaces(
+          DashStyleScope(
+            style: style,
+            child: BillsScreen(
+              controller: bills,
+              accounts: accounts,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openInvoices() {
+    final style = DashVariantStyle.of(context);
+    final auth = AuthScope.of(context);
+    final invoices = InvoicesController(auth);
+    final spaceId = _spaces?.spaceId ?? '';
+    // ignore: discarded_futures
+    invoices.loadForSpace(spaceId);
+    final accounts = _accounts;
+    Navigator.of(context).push(
+      dashModalRoute<void>(
+        builder: (_) => _withSpaces(
+          DashStyleScope(
+            style: style,
+            child: InvoicesScreen(
+              controller: invoices,
+              accounts: accounts,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _openRecurring() {
     final style = DashVariantStyle.of(context);
     final recurring = _recurring ?? RecurringController.fake();
@@ -682,6 +732,8 @@ class _DashboardShellState extends State<DashboardShell>
         onGoals: _openGoals,
         onReports: _openReports,
         onDocuments: _openDocuments,
+        onBills: _openBills,
+        onInvoices: _openInvoices,
         onSettings: _openSettings,
         onUsersPermissions: _openUsersPermissions,
         onManagePlan: () => _openSettings(section: 'plan'),
