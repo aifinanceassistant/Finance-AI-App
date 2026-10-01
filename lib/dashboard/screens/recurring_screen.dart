@@ -150,15 +150,77 @@ class _RecurringScreenState extends State<RecurringScreen> {
     return Map.fromEntries(entries);
   }
 
-  Future<void> _refreshFixes() async {
+  Future<void> _openFixesSheet() async {
     await _ctrl.loadFixes();
     if (!mounted) return;
-    final n = _ctrl.fixes.length;
-    toast(
-      context,
-      n == 0
-          ? 'No suggested fixes right now'
-          : '$n suggested fix${n == 1 ? '' : 'es'} from your transactions',
+    await showDashSheet<void>(
+      context: context,
+      title: 'Suggested fixes',
+      description: _ctrl.fixes.isEmpty
+          ? 'No open suggestions right now.'
+          : '${_ctrl.fixes.length} from your ledger',
+      builder: (ctx, setSheetState) {
+        final fixes = _ctrl.fixes;
+        if (_ctrl.fixesLoading && fixes.isEmpty) {
+          return Text(
+            'Scanning transactions…',
+            style: TextStyle(color: context.dashMute),
+          );
+        }
+        if (fixes.isEmpty) {
+          return Text(
+            'You’re all caught up. New suggestions appear when the ledger shows a clear repeating pattern.',
+            style: TextStyle(color: context.dashMute, height: 1.4),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < fixes.length; i++) ...[
+              if (i > 0) const SizedBox(height: 12),
+              Builder(
+                builder: (_) {
+                  final fix = fixes[i];
+                  return _FixCard(
+                    fix: fix,
+                    onAccept: () async {
+                      final ok = await _ctrl.acceptFix(fix.id);
+                      if (!mounted) return;
+                      setSheetState(() {});
+                      toast(
+                        context,
+                        ok
+                            ? (fix.kind == 'add'
+                                ? 'Recurring added'
+                                : 'Recurring updated')
+                            : 'Could not apply fix',
+                      );
+                      if (ok && _ctrl.fixes.isEmpty && mounted) {
+                        Navigator.pop(context);
+                      }
+                    },
+                    onDismiss: () {
+                      _ctrl.dismissFix(fix.id);
+                      setSheetState(() {});
+                      if (_ctrl.fixes.isEmpty && mounted) {
+                        Navigator.pop(context);
+                      }
+                    },
+                  );
+                },
+              ),
+            ],
+          ],
+        );
+      },
+      actions: [
+        Expanded(
+          child: GhostButton(
+            label: 'Close',
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+      ],
     );
   }
 
@@ -779,9 +841,9 @@ class _RecurringScreenState extends State<RecurringScreen> {
           DashFeedChrome(
             title: 'Recurring',
             subtitle: subtitle,
-            onSecondary: _refreshFixes,
+            onSecondary: _openFixesSheet,
             secondaryIcon: Icons.auto_awesome_outlined,
-            secondaryTooltip: 'Scan for fixes',
+            secondaryTooltip: 'Suggested fixes',
             extraActions: [
               IconButton(
                 onPressed: _openCalendarSheet,
@@ -811,94 +873,6 @@ class _RecurringScreenState extends State<RecurringScreen> {
               expandSearch: true,
             ),
           ),
-          if (_ctrl.fixesLoading || _ctrl.fixes.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: context.dashPanel,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: context.dashLine),
-                ),
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Suggested fixes',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: context.dashInk,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _ctrl.fixesLoading && _ctrl.fixes.isEmpty
-                          ? 'Scanning transactions…'
-                          : '${_ctrl.fixes.length} from your ledger',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: context.dashMute,
-                      ),
-                    ),
-                    for (final fix in _ctrl.fixes) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        fix.title,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: context.dashInk,
-                        ),
-                      ),
-                      Text(
-                        fix.detail,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: context.dashMute,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: AccentButton(
-                              label: 'Accept',
-                              onPressed: () async {
-                                final ok = await _ctrl.acceptFix(fix.id);
-                                if (!mounted) return;
-                                toast(
-                                  context,
-                                  ok
-                                      ? (fix.kind == 'add'
-                                          ? 'Recurring added'
-                                          : 'Recurring updated')
-                                      : 'Could not apply fix',
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: GhostButton(
-                              label: 'Dismiss',
-                              onPressed: () async {
-                                final ok = await _ctrl.dismissFix(fix.id);
-                                if (!mounted) return;
-                                toast(
-                                  context,
-                                  ok ? 'Dismissed' : 'Could not dismiss',
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
           if (_ctrl.loading)
             const DashLoadingBody(kpiCount: 1, listRows: 5)
           else
@@ -940,6 +914,121 @@ class _RecurringScreenState extends State<RecurringScreen> {
                       ],
                     ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FixCard extends StatelessWidget {
+  const _FixCard({
+    required this.fix,
+    required this.onAccept,
+    required this.onDismiss,
+  });
+
+  final RecurringFixItem fix;
+  final VoidCallback onAccept;
+  final VoidCallback onDismiss;
+
+  String get _kindLabel {
+    switch (fix.kind) {
+      case 'update_amount':
+        return 'Update amount';
+      case 'update_schedule':
+        return 'Update schedule';
+      default:
+        return 'New series';
+    }
+  }
+
+  Color _kindColor(BuildContext context) {
+    switch (fix.kind) {
+      case 'update_amount':
+        return const Color(0xFFB7791F);
+      case 'update_schedule':
+        return AppColors.brand;
+      default:
+        return AppColors.success;
+    }
+  }
+
+  Color _kindFill(BuildContext context) {
+    switch (fix.kind) {
+      case 'update_amount':
+        return context.dashWarningFill;
+      case 'update_schedule':
+        return context.dashBrandFill;
+      default:
+        return context.dashSuccessFill;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final amount = money(
+      fix.suggestedMagnitude,
+      currency: fix.suggestedCurrency,
+    );
+    return Container(
+      decoration: BoxDecoration(
+        color: context.dashElevated,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.dashLine),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: _kindFill(context),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                _kindLabel,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _kindColor(context),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            fix.suggestedName.isNotEmpty ? fix.suggestedName : fix.title,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: context.dashInk,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${fix.suggestedCadence} · $amount · next ${fix.suggestedNextDate}',
+            style: TextStyle(fontSize: 13, color: context.dashMute),
+          ),
+          if (fix.detail.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              fix.detail,
+              style: TextStyle(fontSize: 12, color: context.dashSoftMute),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: AccentButton(label: 'Accept', onPressed: onAccept),
+              ),
+              const SizedBox(width: 8),
+              GhostButton(label: 'Dismiss', onPressed: onDismiss),
+            ],
+          ),
         ],
       ),
     );
