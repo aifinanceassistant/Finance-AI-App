@@ -4,12 +4,36 @@ import '../auth/auth_controller.dart';
 import 'data.dart';
 import 'fx_prefetch.dart';
 
+class RecurringFixChange {
+  const RecurringFixChange({
+    required this.field,
+    required this.to,
+    this.from,
+  });
+
+  final String field;
+  final String? from;
+  final String to;
+
+  factory RecurringFixChange.fromJson(Map<String, dynamic> json) {
+    return RecurringFixChange(
+      field: json['field'] as String? ?? '',
+      from: json['from'] as String?,
+      to: json['to'] as String? ?? '',
+    );
+  }
+}
+
 class RecurringFixItem {
   const RecurringFixItem({
     required this.id,
     required this.kind,
+    required this.action,
     required this.title,
+    required this.reason,
     required this.detail,
+    required this.changes,
+    required this.occurrenceCount,
     required this.suggestedName,
     required this.suggestedMagnitude,
     required this.suggestedCurrency,
@@ -24,8 +48,12 @@ class RecurringFixItem {
 
   final String id;
   final String kind;
+  final String action;
   final String title;
+  final String reason;
   final String detail;
+  final List<RecurringFixChange> changes;
+  final int occurrenceCount;
   final String suggestedName;
   final double suggestedMagnitude;
   final String suggestedCurrency;
@@ -41,11 +69,28 @@ class RecurringFixItem {
     final suggested = json['suggested'] is Map<String, dynamic>
         ? json['suggested'] as Map<String, dynamic>
         : <String, dynamic>{};
+    final changesRaw = json['changes'];
+    final changes = <RecurringFixChange>[];
+    if (changesRaw is List) {
+      for (final item in changesRaw) {
+        if (item is Map<String, dynamic>) {
+          changes.add(RecurringFixChange.fromJson(item));
+        }
+      }
+    }
+    final reason = (json['reason'] as String?)?.trim().isNotEmpty == true
+        ? json['reason'] as String
+        : (json['detail'] as String? ?? '');
     return RecurringFixItem(
       id: json['id'] as String? ?? '',
       kind: json['kind'] as String? ?? 'add',
+      action: json['action'] as String? ??
+          (json['kind'] == 'add' ? 'create' : 'update'),
       title: json['title'] as String? ?? 'Suggestion',
-      detail: json['detail'] as String? ?? '',
+      reason: reason,
+      detail: json['detail'] as String? ?? reason,
+      changes: changes,
+      occurrenceCount: (json['occurrenceCount'] as num?)?.toInt() ?? 0,
       suggestedName: suggested['name'] as String? ?? '',
       suggestedMagnitude:
           (suggested['magnitude'] as num?)?.toDouble() ?? 0,

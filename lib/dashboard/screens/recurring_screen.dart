@@ -931,45 +931,17 @@ class _FixCard extends StatelessWidget {
   final VoidCallback onAccept;
   final VoidCallback onDismiss;
 
-  String get _kindLabel {
-    switch (fix.kind) {
-      case 'update_amount':
-        return 'Update amount';
-      case 'update_schedule':
-        return 'Update schedule';
-      default:
-        return 'New series';
-    }
-  }
+  String get _actionLabel =>
+      fix.action == 'create' ? 'Create series' : 'Update series';
 
-  Color _kindColor(BuildContext context) {
-    switch (fix.kind) {
-      case 'update_amount':
-        return const Color(0xFFB7791F);
-      case 'update_schedule':
-        return AppColors.brand;
-      default:
-        return AppColors.success;
-    }
-  }
+  Color _actionColor(BuildContext context) =>
+      fix.action == 'create' ? AppColors.success : AppColors.brand;
 
-  Color _kindFill(BuildContext context) {
-    switch (fix.kind) {
-      case 'update_amount':
-        return context.dashWarningFill;
-      case 'update_schedule':
-        return context.dashBrandFill;
-      default:
-        return context.dashSuccessFill;
-    }
-  }
+  Color _actionFill(BuildContext context) =>
+      fix.action == 'create' ? context.dashSuccessFill : context.dashBrandFill;
 
   @override
   Widget build(BuildContext context) {
-    final amount = money(
-      fix.suggestedMagnitude,
-      currency: fix.suggestedCurrency,
-    );
     return Container(
       decoration: BoxDecoration(
         color: context.dashElevated,
@@ -985,15 +957,15 @@ class _FixCard extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: _kindFill(context),
+                color: _actionFill(context),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                _kindLabel,
+                _actionLabel,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: _kindColor(context),
+                  color: _actionColor(context),
                 ),
               ),
             ),
@@ -1007,23 +979,73 @@ class _FixCard extends StatelessWidget {
               color: context.dashInk,
             ),
           ),
+          const SizedBox(height: 8),
+          Text(
+            'WHY',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+              color: context.dashSoftMute,
+            ),
+          ),
           const SizedBox(height: 4),
           Text(
-            '${fix.suggestedCadence} · $amount · next ${fix.suggestedNextDate}',
-            style: TextStyle(fontSize: 13, color: context.dashMute),
-          ),
-          if (fix.detail.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              fix.detail,
-              style: TextStyle(fontSize: 12, color: context.dashSoftMute),
+            fix.reason.isNotEmpty ? fix.reason : fix.detail,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.35,
+              color: context.dashMute,
             ),
+          ),
+          if (fix.changes.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              'WHAT CHANGES',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+                color: context.dashSoftMute,
+              ),
+            ),
+            const SizedBox(height: 6),
+            for (final change in fix.changes)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '${change.field}: ',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: context.dashInk,
+                          fontSize: 13,
+                        ),
+                      ),
+                      TextSpan(
+                        text: change.from == null || change.from!.isEmpty
+                            ? change.to
+                            : '${change.from} → ${change.to}',
+                        style: TextStyle(
+                          color: context.dashMute,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
           const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
-                child: AccentButton(label: 'Accept', onPressed: onAccept),
+                child: AccentButton(
+                  label: fix.action == 'create' ? 'Create' : 'Update',
+                  onPressed: onAccept,
+                ),
               ),
               const SizedBox(width: 8),
               GhostButton(label: 'Dismiss', onPressed: onDismiss),
