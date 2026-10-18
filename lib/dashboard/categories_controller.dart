@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../auth/auth_controller.dart';
 import '../theme/app_theme.dart';
@@ -13,6 +16,8 @@ class CategoryRecord {
     required this.group,
     required this.color,
     required this.emoji,
+    this.monthlyBudget,
+    this.sortOrder = 0,
   });
 
   final String id;
@@ -23,6 +28,63 @@ class CategoryRecord {
   final String group;
   final Color color;
   final String emoji;
+  final double? monthlyBudget;
+  final int sortOrder;
+
+  CategoryRecord copyWith({
+    String? id,
+    String? name,
+    String? type,
+    double? spent,
+    int? txns,
+    String? group,
+    Color? color,
+    String? emoji,
+    double? monthlyBudget,
+    int? sortOrder,
+    bool clearMonthlyBudget = false,
+  }) {
+    return CategoryRecord(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      spent: spent ?? this.spent,
+      txns: txns ?? this.txns,
+      group: group ?? this.group,
+      color: color ?? this.color,
+      emoji: emoji ?? this.emoji,
+      monthlyBudget:
+          clearMonthlyBudget ? null : (monthlyBudget ?? this.monthlyBudget),
+      sortOrder: sortOrder ?? this.sortOrder,
+    );
+  }
+}
+
+/// Client-side auto-categorize rule (matches web localStorage CategoryRule).
+class CategoryRule {
+  const CategoryRule({
+    required this.id,
+    required this.match,
+    required this.categoryName,
+  });
+
+  final String id;
+  final String match;
+  final String categoryName;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'match': match,
+        'categoryName': categoryName,
+      };
+
+  factory CategoryRule.fromJson(Map<String, dynamic> json) {
+    return CategoryRule(
+      id: json['id'] as String? ?? '',
+      match: (json['match'] as String?) ?? '',
+      categoryName: (json['categoryName'] as String?) ?? '',
+    );
+  }
 }
 
 const _fallbackColors = [
@@ -100,6 +162,7 @@ class CategoriesController extends ChangeNotifier {
           group: meta.group,
           color: meta.color,
           emoji: meta.emoji,
+          monthlyBudget: s.$2 * 1.1,
         ),
       );
     }
@@ -112,10 +175,13 @@ class CategoriesController extends ChangeNotifier {
   final AuthController _auth;
 
   List<CategoryRecord> _categories = [];
+  List<CategoryRule> _rules = [];
+  Map<String, double> _localBudgets = {};
   String _spaceId = '';
   bool _loading = true;
 
   List<CategoryRecord> get categories => List.unmodifiable(_categories);
+  List<CategoryRule> get rules => List.unmodifiable(_rules);
   bool get loading => _loading;
   String get spaceId => _spaceId;
 
@@ -126,6 +192,8 @@ class CategoriesController extends ChangeNotifier {
     ('Transport', 210, 7),
     ('Subscriptions', 89, 6),
   ];
+
+  String get _metaKey => 'financeai-category-meta:$_spaceId';
 
   static CategoryRecord fromJson(Map<String, dynamic> json, int index) {
     final name = (json['name'] as String?)?.trim() ?? 'Category';
@@ -140,13 +208,85 @@ class CategoriesController extends ChangeNotifier {
       group: meta.group,
       color: meta.color,
       emoji: meta.emoji,
+      monthlyBudget: (json['monthlyBudget'] as num?)?.toDouble(),
+      sortOrder: (json['sortOrder'] as num?)?.toInt() ?? index,
     );
+  }
+
+  Future<void> _loadLocalMeta() async {
+    if (_spaceId.isEmpty || _spaceId == 'pending') {
+      _rules = [];
+      _localBudgets = {};
+      return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_metaKey);
+      if (raw == null || raw.isEmpty) {
+        _rules = [];
+        _localBudgets = {};
+        return;
+      }
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        _rules = [];
+        _localBudgets = {};
+        return;
+      }
+      final rulesRaw = decoded['rules'];
+      final budgetsRaw = decoded['monthlyBudgets'];
+      _rules = [];
+      if (rulesRaw is List) {
+        for (final item in rulesRaw) {
+          if (item is Map<String, dynamic>) {
+            _rules.add(CategoryRule.fromJson(item));
+          } else if (item is Map) {
+            _rules.add(CategoryRule.fromJson(Map<String, dynamic>.from(item)));
+          }
+        }
+      }
+      _localBudgets = {};
+      if (budgetsRaw is Map) {
+        budgetsRaw.forEach((k, v) {
+          final n = v is num ? v.toDouble() : double.tryParse('$v');
+          if (n != null) _localBudgets['$k'] = n;
+        });
+      }
+    } catch (e) {
+      debugPrint('CategoriesController._loadLocalMeta: $e');
+      _rules = [];
+      _localBudgets = {};
+    }
+  }
+
+  Future<void> _saveLocalMeta() async {
+    if (_spaceId.isEmpty || _spaceId == 'pending' || _auth.isFake) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _metaKey,
+        jsonEncode({
+          'rules': _rules.map((r) => r.toJson()).toList(),
+          'monthlyBudgets': _localBudgets,
+        }),
+      );
+    } catch (e) {
+      debugPrint('CategoriesController._saveLocalMeta: $e');
+    }
+  }
+
+  CategoryRecord _withLocalBudget(CategoryRecord c) {
+    final local = _localBudgets[c.id] ?? _localBudgets[c.name];
+    if (local == null) return c;
+    return c.copyWith(monthlyBudget: local);
   }
 
   Future<void> loadForSpace(String spaceId) async {
     _spaceId = spaceId;
     if (spaceId.isEmpty || spaceId == 'pending') {
       _categories = [];
+      _rules = [];
+      _localBudgets = {};
       _loading = false;
       notifyListeners();
       return;
@@ -154,6 +294,10 @@ class CategoriesController extends ChangeNotifier {
 
     if (_auth.isFake) {
       _categories = CategoriesController.fake()._categories;
+      _rules = const [
+        CategoryRule(id: 'r1', match: 'uber', categoryName: 'Transport'),
+        CategoryRule(id: 'r2', match: 'netflix', categoryName: 'Subscriptions'),
+      ];
       _loading = false;
       notifyListeners();
       return;
@@ -162,6 +306,7 @@ class CategoriesController extends ChangeNotifier {
     _loading = true;
     notifyListeners();
     try {
+      await _loadLocalMeta();
       final decoded = await _auth.apiDecode(
         'GET',
         '/api/categories?portfolio_id=${Uri.encodeQueryComponent(spaceId)}',
@@ -171,7 +316,7 @@ class CategoriesController extends ChangeNotifier {
         for (var i = 0; i < decoded.length; i++) {
           final item = decoded[i];
           if (item is Map<String, dynamic>) {
-            list.add(fromJson(item, i));
+            list.add(_withLocalBudget(fromJson(item, i)));
           }
         }
       }
@@ -187,6 +332,7 @@ class CategoriesController extends ChangeNotifier {
   Future<CategoryRecord?> create({
     required String name,
     required String type,
+    double? monthlyBudget,
   }) async {
     if (_spaceId.isEmpty) return null;
 
@@ -201,6 +347,7 @@ class CategoriesController extends ChangeNotifier {
         group: meta.group,
         color: meta.color,
         emoji: meta.emoji,
+        monthlyBudget: monthlyBudget,
       );
       _categories = [..._categories, row];
       notifyListeners();
@@ -214,10 +361,16 @@ class CategoriesController extends ChangeNotifier {
         'portfolioId': _spaceId,
         'name': name,
         'type': type,
+        if (monthlyBudget != null) 'monthlyBudget': monthlyBudget,
       },
     );
     if (decoded is! Map<String, dynamic>) return null;
-    final row = fromJson(decoded, _categories.length);
+    var row = fromJson(decoded, _categories.length);
+    if (monthlyBudget != null) {
+      _localBudgets[row.id] = monthlyBudget;
+      await _saveLocalMeta();
+      row = row.copyWith(monthlyBudget: monthlyBudget);
+    }
     _categories = [..._categories, row];
     notifyListeners();
     return row;
@@ -227,19 +380,7 @@ class CategoriesController extends ChangeNotifier {
     if (_auth.isFake) {
       _categories = [
         for (final c in _categories)
-          if (c.id == id)
-            CategoryRecord(
-              id: c.id,
-              name: name,
-              type: c.type,
-              spent: c.spent,
-              txns: c.txns,
-              group: c.group,
-              color: c.color,
-              emoji: c.emoji,
-            )
-          else
-            c,
+          if (c.id == id) c.copyWith(name: name) else c,
       ];
       notifyListeners();
       return true;
@@ -255,16 +396,7 @@ class CategoriesController extends ChangeNotifier {
     _categories = [
       for (final c in _categories)
         if (c.id == id)
-          CategoryRecord(
-            id: updated.id,
-            name: updated.name,
-            type: updated.type,
-            spent: c.spent,
-            txns: c.txns,
-            group: c.group,
-            color: c.color,
-            emoji: c.emoji,
-          )
+          c.copyWith(name: updated.name, type: updated.type)
         else
           c,
     ];
@@ -272,15 +404,133 @@ class CategoriesController extends ChangeNotifier {
     return true;
   }
 
+  Future<bool> setMonthlyBudget(String id, double? budget) async {
+    final idx = _categories.indexWhere((c) => c.id == id);
+    if (idx < 0) return false;
+    final cur = _categories[idx];
+
+    if (_auth.isFake) {
+      _categories = [..._categories]
+        ..[idx] = cur.copyWith(
+          monthlyBudget: budget,
+          clearMonthlyBudget: budget == null,
+        );
+      notifyListeners();
+      return true;
+    }
+
+    // Persist to API when available; also keep local meta like web.
+    try {
+      await _auth.apiDecode(
+        'PATCH',
+        '/api/categories/$id',
+        body: {'monthlyBudget': budget},
+      );
+    } catch (e) {
+      debugPrint('CategoriesController.setMonthlyBudget api: $e');
+    }
+    if (budget == null) {
+      _localBudgets.remove(id);
+      _localBudgets.remove(cur.name);
+    } else {
+      _localBudgets[id] = budget;
+    }
+    await _saveLocalMeta();
+    _categories = [..._categories]
+      ..[idx] = cur.copyWith(
+        monthlyBudget: budget,
+        clearMonthlyBudget: budget == null,
+      );
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> addRule({
+    required String match,
+    required String categoryName,
+  }) async {
+    final trimmed = match.trim();
+    if (trimmed.isEmpty || categoryName.trim().isEmpty) return false;
+    final rule = CategoryRule(
+      id: 'rule_${DateTime.now().millisecondsSinceEpoch}',
+      match: trimmed,
+      categoryName: categoryName.trim(),
+    );
+    _rules = [..._rules, rule];
+    await _saveLocalMeta();
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> removeRule(String id) async {
+    _rules = _rules.where((r) => r.id != id).toList();
+    await _saveLocalMeta();
+    notifyListeners();
+    return true;
+  }
+
+  /// Delete [sourceId] and remap local rules/budgets to [targetName] (web merge).
+  Future<bool> mergeInto({
+    required String sourceId,
+    required String targetId,
+  }) async {
+    final source = _categories.cast<CategoryRecord?>().firstWhere(
+          (c) => c?.id == sourceId,
+          orElse: () => null,
+        );
+    final target = _categories.cast<CategoryRecord?>().firstWhere(
+          (c) => c?.id == targetId,
+          orElse: () => null,
+        );
+    if (source == null || target == null || sourceId == targetId) return false;
+
+    final ok = await remove(sourceId);
+    if (!ok) return false;
+
+    _rules = [
+      for (final r in _rules)
+        if (r.categoryName == source.name)
+          CategoryRule(
+            id: r.id,
+            match: r.match,
+            categoryName: target.name,
+          )
+        else
+          r,
+    ];
+    final budget = _localBudgets.remove(sourceId) ??
+        _localBudgets.remove(source.name);
+    if (budget != null) {
+      _localBudgets[targetId] =
+          (_localBudgets[targetId] ?? target.monthlyBudget ?? 0) + budget;
+    }
+    await _saveLocalMeta();
+    notifyListeners();
+    return true;
+  }
+
   Future<bool> remove(String id) async {
     if (_auth.isFake) {
+      final gone = _categories.where((c) => c.id == id).toList();
       _categories = _categories.where((c) => c.id != id).toList();
+      for (final c in gone) {
+        _localBudgets.remove(c.id);
+        _localBudgets.remove(c.name);
+        _rules = _rules.where((r) => r.categoryName != c.name).toList();
+      }
       notifyListeners();
       return true;
     }
     final decoded = await _auth.apiDecode('DELETE', '/api/categories/$id');
     if (decoded == null) return false;
+    final gone = _categories.where((c) => c.id == id).toList();
     _categories = _categories.where((c) => c.id != id).toList();
+    for (final c in gone) {
+      _localBudgets.remove(c.id);
+      _localBudgets.remove(c.name);
+      _rules = _rules.where((r) => r.categoryName != c.name).toList();
+    }
+    await _saveLocalMeta();
     notifyListeners();
     return true;
   }

@@ -11,8 +11,12 @@ import '../../auth/auth_scope.dart';
 import '../accounts_controller.dart';
 import '../accounts_scope.dart';
 import '../categories_scope.dart';
+import '../contact_picker.dart';
+import '../contacts_controller.dart';
+import '../contacts_scope.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
+import '../download_menu.dart';
 import '../filter_sort.dart';
 import '../form_validation.dart';
 import '../shimmer.dart';
@@ -674,29 +678,49 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     return applySort(filtered, _sortRules, _txnValue);
   }
 
-  void _exportCsv() {
+  Future<void> _exportTable() async {
     final filtered = _filtered;
-    final rows = [
-      'Amount,Type,Status,Approval,Description,Category,Account,Date',
-      for (final t in filtered)
-        '${t.amount},${moneyMoveLabel(t.type)},${_statusLabel(t.status)},'
-        '${_approvalLabel(t.approvalStatus)},'
-        '"${t.merchant.replaceAll('"', '""')}",'
-        '"${t.category.replaceAll('"', '""')}",'
-        '"${t.account.replaceAll('"', '""')}",'
-        '"${t.date.replaceAll('"', '""')}"',
-    ];
-    Clipboard.setData(ClipboardData(text: rows.join('\n')));
-    toast(
-      context,
-      'CSV copied · ${filtered.length} transaction${filtered.length == 1 ? '' : 's'}',
+    await showDownloadMenu(
+      context: context,
+      filename: 'transactions',
+      title: 'Transactions',
+      rows: [
+        [
+          'Amount',
+          'Type',
+          'Status',
+          'Approval',
+          'Description',
+          'Category',
+          'Account',
+          'Date',
+          'Notes',
+          'Tax',
+        ],
+        for (final t in filtered)
+          [
+            '${t.amount}',
+            moneyMoveLabel(t.type),
+            _statusLabel(t.status),
+            _approvalLabel(t.approvalStatus),
+            t.merchant,
+            t.category,
+            t.account,
+            t.date,
+            t.notes ?? '',
+            t.tax?.toString() ?? '',
+          ],
+      ],
     );
   }
 
   Future<void> _openAddSheet() async {
     final accounts = AccountsScope.of(context).accounts;
+    final contacts = ContactsScope.maybeOf(context);
     final merchantCtrl = TextEditingController();
     final amountCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    final taxCtrl = TextEditingController();
     final categoryOptions = [
       'Uncategorized',
       ...{..._txns.map((t) => t.category)}.where((c) => c != 'Uncategorized'),
@@ -708,6 +732,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     ];
     var accountKey = accountKeys.isNotEmpty ? accountKeys.first : '';
     var currency = DisplayCurrency.code;
+    String? contactId;
+    var useLineItems = false;
+    final lineDesc = <TextEditingController>[];
+    final lineAmt = <TextEditingController>[];
     var fieldErrors = <String, String?>{};
     final dateCtrl = TextEditingController(
       text: DateTime.now().toIso8601String().substring(0, 10),
@@ -723,6 +751,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             if (AccountsController.accountKey(a) == accountKey) return a;
           }
           return accounts.isEmpty ? null : accounts.first;
+        }
+
+        void addLine() {
+          setSheetState(() {
+            lineDesc.add(TextEditingController());
+            lineAmt.add(TextEditingController());
+          });
         }
 
         return Column(
@@ -764,6 +799,17 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               ],
             ),
             const SizedBox(height: 14),
+            const DashFieldLabel('Tax'),
+            DashTextField(
+              controller: taxCtrl,
+              hint: 'Optional',
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+              ],
+            ),
+            const SizedBox(height: 14),
             const DashFieldLabel('Type'),
             DashDropdown<MoneyMove>(
               value: type,
@@ -773,7 +819,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 MoneyMove.transfer,
               ],
               labelOf: moneyMoveLabel,
-              onChanged: (v) => setSheetState(() => type = v),
+              onChanged: (v) {
+                setSheetState(() {
+                  type = v;
+                  contactId = null;
+                });
+              },
             ),
             const SizedBox(height: 14),
             const DashFieldLabel('Category'),
@@ -783,6 +834,15 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               labelOf: (c) => c,
               onChanged: (v) => setSheetState(() => category = v),
             ),
+            if (contacts != null) ...[
+              const SizedBox(height: 14),
+              ContactPickerField(
+                contacts: contacts,
+                valueId: contactId,
+                kindFilter: contactKindForMoneyMove(type == MoneyMove.income),
+                onChanged: (id) => setSheetState(() => contactId = id),
+              ),
+            ],
             const SizedBox(height: 14),
             const DashFieldLabel('Account'),
             if (accounts.isEmpty)
@@ -815,6 +875,90 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               hint: 'YYYY-MM-DD',
               errorText: fieldErrors['date'],
             ),
+            const SizedBox(height: 14),
+            const DashFieldLabel('Notes'),
+            DashTextField(
+              controller: notesCtrl,
+              hint: 'Optional memo',
+              maxLines: 3,
+            ),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () => setSheetState(() {
+                useLineItems = !useLineItems;
+                if (useLineItems && lineDesc.isEmpty) addLine();
+              }),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: useLineItems,
+                    onChanged: (v) => setSheetState(() {
+                      useLineItems = v ?? false;
+                      if (useLineItems && lineDesc.isEmpty) {
+                        lineDesc.add(TextEditingController());
+                        lineAmt.add(TextEditingController());
+                      }
+                    }),
+                    activeColor: AppColors.brand,
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Use line items',
+                      style: TextStyle(
+                        color: context.dashInk,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (useLineItems) ...[
+              for (var i = 0; i < lineDesc.length; i++) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: DashTextField(
+                        controller: lineDesc[i],
+                        hint: 'Description',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DashTextField(
+                        controller: lineAmt[i],
+                        hint: '0.00',
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => setSheetState(() {
+                        lineDesc[i].dispose();
+                        lineAmt[i].dispose();
+                        lineDesc.removeAt(i);
+                        lineAmt.removeAt(i);
+                      }),
+                      icon: const Icon(Icons.close, size: 18),
+                    ),
+                  ],
+                ),
+              ],
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: addLine,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add line'),
+                ),
+              ),
+            ],
             const SizedBox(height: 18),
             AccentButton(
               label: 'Add',
@@ -847,6 +991,22 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   return;
                 }
                 final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+                final taxRaw = taxCtrl.text.trim();
+                final tax = taxRaw.isEmpty ? null : double.tryParse(taxRaw);
+                List<TxnLineItem>? lines;
+                if (useLineItems) {
+                  lines = [
+                    for (var i = 0; i < lineDesc.length; i++)
+                      if (lineDesc[i].text.trim().isNotEmpty)
+                        TxnLineItem(
+                          id: 'line_${DateTime.now().millisecondsSinceEpoch}_$i',
+                          description: lineDesc[i].text.trim(),
+                          amount: double.tryParse(lineAmt[i].text.trim()) ?? 0,
+                        ),
+                  ];
+                  if (lines.isEmpty) lines = null;
+                }
+                final notes = notesCtrl.text.trim();
                 final created = await _ctrl.create(
                   merchant: merchant,
                   amount: amount,
@@ -856,6 +1016,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   type: type,
                   date: dateCtrl.text.trim(),
                   currency: currency,
+                  notes: notes.isEmpty ? null : notes,
+                  contactId: contactId,
+                  tax: tax,
+                  lineItems: lines,
                 );
                 if (!ctx.mounted) return;
                 Navigator.pop(ctx);
@@ -876,6 +1040,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     merchantCtrl.dispose();
     amountCtrl.dispose();
     dateCtrl.dispose();
+    notesCtrl.dispose();
+    taxCtrl.dispose();
+    for (final c in lineDesc) {
+      c.dispose();
+    }
+    for (final c in lineAmt) {
+      c.dispose();
+    }
   }
 
   List<String> _categoryOptionsFor(DemoTxn t) {
@@ -907,9 +1079,37 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     if (!categoryOptions.contains(category)) {
       category = categoryOptions.first;
     }
+    final contacts = ContactsScope.maybeOf(context);
+    final notesCtrl = TextEditingController(text: txn.notes ?? '');
+    final taxCtrl = TextEditingController(
+      text: txn.tax != null ? txn.tax!.toStringAsFixed(2) : '',
+    );
+    String? contactId = txn.contactId;
+    var useLineItems = txn.lineItems != null && txn.lineItems!.isNotEmpty;
+    final lineDesc = <TextEditingController>[
+      for (final li in txn.lineItems ?? const <TxnLineItem>[])
+        TextEditingController(text: li.description),
+    ];
+    final lineAmt = <TextEditingController>[
+      for (final li in txn.lineItems ?? const <TxnLineItem>[])
+        TextEditingController(text: li.amount.toStringAsFixed(2)),
+    ];
+    final lineIds = <String>[
+      for (final li in txn.lineItems ?? const <TxnLineItem>[]) li.id,
+    ];
 
     var docs = await _ctrl.listDocuments(txn.id);
-    if (!mounted) return;
+    if (!mounted) {
+      notesCtrl.dispose();
+      taxCtrl.dispose();
+      for (final c in lineDesc) {
+        c.dispose();
+      }
+      for (final c in lineAmt) {
+        c.dispose();
+      }
+      return;
+    }
     var kind = 'receipt';
     var uploading = false;
 
@@ -1013,6 +1213,126 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               labelOf: moneyMoveLabel,
               onChanged: (v) => setSheetState(() => type = v),
             ),
+            if (contacts != null) ...[
+              const SizedBox(height: 14),
+              ContactPickerField(
+                contacts: contacts,
+                valueId: contactId,
+                kindFilter: contactKindForMoneyMove(type == MoneyMove.income),
+                onChanged: (id) => setSheetState(() => contactId = id),
+              ),
+            ],
+            const SizedBox(height: 14),
+            const DashFieldLabel('Tax'),
+            DashTextField(
+              controller: taxCtrl,
+              hint: 'Optional',
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const DashFieldLabel('Notes'),
+            DashTextField(
+              controller: notesCtrl,
+              hint: 'Optional memo',
+              maxLines: 3,
+            ),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () => setSheetState(() {
+                useLineItems = !useLineItems;
+                if (useLineItems && lineDesc.isEmpty) {
+                  lineDesc.add(TextEditingController());
+                  lineAmt.add(TextEditingController());
+                  lineIds.add(
+                    'line_${DateTime.now().millisecondsSinceEpoch}',
+                  );
+                }
+              }),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: useLineItems,
+                    onChanged: (v) => setSheetState(() {
+                      useLineItems = v ?? false;
+                      if (useLineItems && lineDesc.isEmpty) {
+                        lineDesc.add(TextEditingController());
+                        lineAmt.add(TextEditingController());
+                        lineIds.add(
+                          'line_${DateTime.now().millisecondsSinceEpoch}',
+                        );
+                      }
+                    }),
+                    activeColor: AppColors.brand,
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Use line items',
+                      style: TextStyle(
+                        color: context.dashInk,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (useLineItems) ...[
+              for (var i = 0; i < lineDesc.length; i++) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: DashTextField(
+                        controller: lineDesc[i],
+                        hint: 'Description',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DashTextField(
+                        controller: lineAmt[i],
+                        hint: '0.00',
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => setSheetState(() {
+                        lineDesc[i].dispose();
+                        lineAmt[i].dispose();
+                        lineDesc.removeAt(i);
+                        lineAmt.removeAt(i);
+                        lineIds.removeAt(i);
+                      }),
+                      icon: const Icon(Icons.close, size: 18),
+                    ),
+                  ],
+                ),
+              ],
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => setSheetState(() {
+                    lineDesc.add(TextEditingController());
+                    lineAmt.add(TextEditingController());
+                    lineIds.add(
+                      'line_${DateTime.now().millisecondsSinceEpoch}',
+                    );
+                  }),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add line'),
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             InkWell(
               onTap: () => setSheetState(() => reconciled = !reconciled),
@@ -1226,11 +1546,42 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           child: AccentButton(
             label: 'Save',
             onPressed: () async {
+              final taxRaw = taxCtrl.text.trim();
+              final tax = taxRaw.isEmpty ? null : double.tryParse(taxRaw);
+              List<TxnLineItem>? lines;
+              var clearLines = false;
+              if (useLineItems) {
+                lines = [
+                  for (var i = 0; i < lineDesc.length; i++)
+                    if (lineDesc[i].text.trim().isNotEmpty)
+                      TxnLineItem(
+                        id: i < lineIds.length
+                            ? lineIds[i]
+                            : 'line_${DateTime.now().millisecondsSinceEpoch}_$i',
+                        description: lineDesc[i].text.trim(),
+                        amount:
+                            double.tryParse(lineAmt[i].text.trim()) ?? 0,
+                      ),
+                ];
+                if (lines.isEmpty) {
+                  lines = null;
+                  clearLines = true;
+                }
+              } else if (txn.lineItems != null) {
+                clearLines = true;
+              }
               await _ctrl.updateDetail(
                 id: txn.id,
                 category: category,
                 type: type,
                 reconciled: reconciled,
+                notes: notesCtrl.text.trim(),
+                contactId: contactId,
+                clearContactId: contactId == null,
+                tax: tax,
+                clearTax: tax == null,
+                lineItems: lines,
+                clearLineItems: clearLines,
               );
               if (!mounted) return;
               Navigator.pop(context);
@@ -1240,6 +1591,15 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         ),
       ],
     );
+
+    notesCtrl.dispose();
+    taxCtrl.dispose();
+    for (final c in lineDesc) {
+      c.dispose();
+    }
+    for (final c in lineAmt) {
+      c.dispose();
+    }
   }
 
   Future<void> _openReconcileSheet() async {
@@ -1449,7 +1809,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           setState(() => _filterRules = r),
                       onSortsChanged: (s) =>
                           setState(() => _sortRules = s),
-                      onExport: _exportCsv,
+                      onExport: () {
+                        // ignore: discarded_futures
+                        _exportTable();
+                      },
                       onReconcile: _openReconcileSheet,
                       onAdd: _openAddSheet,
                       inflow: inflow,

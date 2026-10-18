@@ -4,9 +4,13 @@ import 'package:flutter/services.dart';
 import '../../theme/app_theme.dart';
 import '../accounts_controller.dart';
 import '../bills_controller.dart';
+import '../contact_picker.dart';
+import '../contacts_controller.dart';
+import '../contacts_scope.dart';
 import '../dash_colors.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
+import '../download_menu.dart';
 import '../filter_sort.dart';
 import '../form_validation.dart';
 import '../shimmer.dart';
@@ -143,6 +147,8 @@ class _BillsScreenState extends State<BillsScreen> {
     var currency = kSupportedCurrencies.contains(existing?.currency ?? '')
         ? existing!.currency
         : DisplayCurrency.code;
+    final contacts = ContactsScope.maybeOf(context);
+    String? contactId = existing?.contactId;
     var fieldErrors = <String, String?>{};
 
     await showDashSheet<void>(
@@ -215,6 +221,15 @@ class _BillsScreenState extends State<BillsScreen> {
               hint: 'YYYY-MM-DD (optional)',
               errorText: fieldErrors['dueDate'],
             ),
+            if (contacts != null) ...[
+              const SizedBox(height: 14),
+              ContactPickerField(
+                contacts: contacts,
+                valueId: contactId,
+                kindFilter: ContactKind.vendor,
+                onChanged: (id) => setSheetState(() => contactId = id),
+              ),
+            ],
             const SizedBox(height: 14),
             const DashFieldLabel('Notes'),
             DashTextField(
@@ -256,6 +271,8 @@ class _BillsScreenState extends State<BillsScreen> {
                     clearDueDate: due.isEmpty,
                     originalAmount: amount,
                     currency: currency,
+                    contactId: contactId,
+                    clearContactId: contactId == null,
                     notes: notesCtrl.text.trim().isEmpty
                         ? null
                         : notesCtrl.text.trim(),
@@ -276,6 +293,7 @@ class _BillsScreenState extends State<BillsScreen> {
                     dueDate: due.isEmpty ? null : due,
                     originalAmount: amount,
                     currency: currency,
+                    contactId: contactId,
                     notes: notesCtrl.text.trim().isEmpty
                         ? null
                         : notesCtrl.text.trim(),
@@ -445,6 +463,42 @@ class _BillsScreenState extends State<BillsScreen> {
     toast(context, removed ? 'Bill deleted' : 'Could not delete');
   }
 
+  Future<void> _exportTable() {
+    final contacts = ContactsScope.maybeOf(context);
+    return showDownloadMenu(
+      context: context,
+      filename: 'bills',
+      title: 'Bills',
+      rows: [
+        [
+          'Number',
+          'Description',
+          'Vendor',
+          'Status',
+          'Issue date',
+          'Due date',
+          'Amount',
+          'Remaining',
+          'Currency',
+          'Notes',
+        ],
+        for (final b in _filtered)
+          [
+            b.number,
+            b.description,
+            contacts?.byId(b.contactId)?.name ?? '',
+            _statusLabel(b.status),
+            b.issueDate,
+            b.dueDate ?? '',
+            b.originalAmount.toStringAsFixed(2),
+            b.amountRemaining.toStringAsFixed(2),
+            b.currency,
+            b.notes ?? '',
+          ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _filtered;
@@ -469,6 +523,7 @@ class _BillsScreenState extends State<BillsScreen> {
             DashFeedChrome(
               title: 'Bills',
               subtitle: subtitle,
+              onSecondary: filtered.isEmpty ? null : _exportTable,
               onPrimary: () => _openEditor(),
               primaryTooltip: 'Add bill',
               primaryEnabled: canWrite,

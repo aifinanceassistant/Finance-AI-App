@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../dash_colors.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
+import '../download_menu.dart';
 import '../filter_sort.dart';
 import '../form_validation.dart';
 import '../investments_controller.dart';
@@ -101,6 +102,26 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
         applySearch(_holdings, _search, _filterFields, _holdingValue);
     final filtered = applyFilters(searched, _filterRules, _holdingValue);
     return applySort(filtered, _sortRules, _holdingValue);
+  }
+
+  Future<void> _exportTable() {
+    return showDownloadMenu(
+      context: context,
+      filename: 'investments',
+      title: 'Investments',
+      rows: [
+        ['Name', 'Ticker', 'Type', 'Value', 'Cost', 'Change %'],
+        for (final h in _filtered)
+          [
+            h.name,
+            h.ticker,
+            h.type,
+            h.value.toStringAsFixed(2),
+            h.cost.toStringAsFixed(2),
+            h.change.toStringAsFixed(2),
+          ],
+      ],
+    );
   }
 
   List<_AllocationRow> get _allocation {
@@ -638,6 +659,13 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
             secondaryIcon: Icons.sync_rounded,
             secondaryTooltip: 'Refresh prices',
             extraActions: [
+              IconButton(
+                onPressed: _filtered.isEmpty ? null : _exportTable,
+                tooltip: 'Export',
+                icon: const Icon(Icons.download_outlined, size: 22),
+                color: context.dashInk,
+                visualDensity: VisualDensity.compact,
+              ),
               IconButton(
                 onPressed: _openAllocationSheet,
                 tooltip: 'Allocation',

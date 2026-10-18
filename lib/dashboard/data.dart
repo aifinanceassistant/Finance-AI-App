@@ -41,6 +41,36 @@ MoneyMove inferMoneyMove(double amount, String category, [String? label]) {
   return MoneyMove.expense;
 }
 
+class TxnLineItem {
+  const TxnLineItem({
+    required this.id,
+    required this.description,
+    required this.amount,
+    this.category,
+  });
+
+  final String id;
+  final String description;
+  final double amount;
+  final String? category;
+
+  factory TxnLineItem.fromJson(Map<String, dynamic> json) {
+    return TxnLineItem(
+      id: json['id'] as String? ?? '',
+      description: (json['description'] as String?)?.trim() ?? '',
+      amount: (json['amount'] as num?)?.toDouble() ?? 0,
+      category: (json['category'] as String?)?.trim(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'description': description,
+        'amount': amount,
+        if (category != null && category!.isNotEmpty) 'category': category,
+      };
+}
+
 class DemoTxn {
   DemoTxn({
     required this.id,
@@ -54,6 +84,10 @@ class DemoTxn {
     this.dateIso,
     this.originalAmount,
     this.originalCurrency,
+    this.notes,
+    this.contactId,
+    this.tax,
+    this.lineItems,
     MoneyMove? type,
   }) : type = type ?? inferMoneyMove(amount, category, merchant);
 
@@ -71,6 +105,11 @@ class DemoTxn {
   final MoneyMove type;
   final double? originalAmount;
   final String? originalCurrency;
+  final String? notes;
+  final String? contactId;
+  /// Absolute tax amount in the transaction currency.
+  final double? tax;
+  final List<TxnLineItem>? lineItems;
 
   DemoTxn copyWith({
     String? id,
@@ -85,6 +124,14 @@ class DemoTxn {
     MoneyMove? type,
     double? originalAmount,
     String? originalCurrency,
+    String? notes,
+    String? contactId,
+    double? tax,
+    List<TxnLineItem>? lineItems,
+    bool clearNotes = false,
+    bool clearContactId = false,
+    bool clearTax = false,
+    bool clearLineItems = false,
   }) {
     return DemoTxn(
       id: id ?? this.id,
@@ -99,6 +146,10 @@ class DemoTxn {
       type: type ?? this.type,
       originalAmount: originalAmount ?? this.originalAmount,
       originalCurrency: originalCurrency ?? this.originalCurrency,
+      notes: clearNotes ? null : (notes ?? this.notes),
+      contactId: clearContactId ? null : (contactId ?? this.contactId),
+      tax: clearTax ? null : (tax ?? this.tax),
+      lineItems: clearLineItems ? null : (lineItems ?? this.lineItems),
     );
   }
 }
@@ -357,6 +408,11 @@ class DemoRecurring {
     this.originalAmount,
     this.originalCurrency,
     this.autoApply = false,
+    this.notes,
+    this.contactId,
+    this.tax,
+    this.totalOccurrences,
+    this.remainingOccurrences,
     MoneyMove? type,
   }) : type = type ?? inferMoneyMove(amount, category, name);
 
@@ -376,6 +432,11 @@ class DemoRecurring {
   final double? originalAmount;
   final String? originalCurrency;
   final bool autoApply;
+  final String? notes;
+  final String? contactId;
+  final double? tax;
+  final int? totalOccurrences;
+  final int? remainingOccurrences;
 
   String get endLabel => end.trim().isEmpty ? 'Ongoing' : end;
 
@@ -394,6 +455,16 @@ class DemoRecurring {
     double? originalAmount,
     String? originalCurrency,
     bool? autoApply,
+    String? notes,
+    String? contactId,
+    double? tax,
+    int? totalOccurrences,
+    int? remainingOccurrences,
+    bool clearNotes = false,
+    bool clearContactId = false,
+    bool clearTax = false,
+    bool clearTotalOccurrences = false,
+    bool clearRemainingOccurrences = false,
   }) {
     return DemoRecurring(
       id: id ?? this.id,
@@ -410,6 +481,15 @@ class DemoRecurring {
       originalAmount: originalAmount ?? this.originalAmount,
       originalCurrency: originalCurrency ?? this.originalCurrency,
       autoApply: autoApply ?? this.autoApply,
+      notes: clearNotes ? null : (notes ?? this.notes),
+      contactId: clearContactId ? null : (contactId ?? this.contactId),
+      tax: clearTax ? null : (tax ?? this.tax),
+      totalOccurrences: clearTotalOccurrences
+          ? null
+          : (totalOccurrences ?? this.totalOccurrences),
+      remainingOccurrences: clearRemainingOccurrences
+          ? null
+          : (remainingOccurrences ?? this.remainingOccurrences),
     );
   }
 }

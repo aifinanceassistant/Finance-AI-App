@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../dash_colors.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
+import '../download_menu.dart';
 import '../filter_sort.dart';
 import '../form_validation.dart';
 import '../goals_controller.dart';
@@ -91,6 +92,26 @@ class _GoalsScreenState extends State<GoalsScreen> {
     final searched = applySearch(_goals, _search, _filterFields, _goalValue);
     final filtered = applyFilters(searched, _filterRules, _goalValue);
     return applySort(filtered, _sortRules, _goalValue);
+  }
+
+  Future<void> _exportTable() {
+    return showDownloadMenu(
+      context: context,
+      filename: 'goals',
+      title: 'Goals',
+      rows: [
+        ['Name', 'Saved', 'Target', 'Progress %', 'Due', 'Note'],
+        for (final g in _filtered)
+          [
+            g.name,
+            g.saved.toStringAsFixed(2),
+            g.target.toStringAsFixed(2),
+            (g.target > 0 ? g.saved / g.target * 100 : 0).toStringAsFixed(0),
+            g.due,
+            g.note,
+          ],
+      ],
+    );
   }
 
   DemoGoal? get _primary => _goals.isEmpty ? null : _goals.first;
@@ -618,6 +639,15 @@ class _GoalsScreenState extends State<GoalsScreen> {
             onSecondary: () => _openProgressInfo(),
             secondaryIcon: Icons.info_outline_rounded,
             secondaryTooltip: 'How progress works',
+            extraActions: [
+              IconButton(
+                onPressed: _filtered.isEmpty ? null : _exportTable,
+                tooltip: 'Export',
+                icon: const Icon(Icons.download_outlined, size: 22),
+                color: context.dashInk,
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
             onPrimary: _openNewGoalSheet,
             primaryTooltip: 'New goal',
             primaryEnabled: canWrite,

@@ -243,6 +243,8 @@ class RecurringController extends ChangeNotifier {
             endDate: endDate,
             remainingOccurrences: remaining,
           );
+    final notes = (json['notes'] as String?)?.trim();
+    final contactId = json['contactId'] as String?;
     return DemoRecurring(
       id: json['id'] as String? ?? '',
       name: name,
@@ -261,6 +263,11 @@ class RecurringController extends ChangeNotifier {
               ? originalCurrencyRaw
               : null,
       autoApply: json['autoApply'] == true,
+      notes: notes?.isEmpty == true ? null : notes,
+      contactId: contactId?.isEmpty == true ? null : contactId,
+      tax: (json['tax'] as num?)?.toDouble(),
+      totalOccurrences: (json['totalOccurrences'] as num?)?.toInt(),
+      remainingOccurrences: remaining,
     );
   }
 
@@ -387,6 +394,10 @@ class RecurringController extends ChangeNotifier {
     required MoneyMove type,
     String? currency,
     bool autoApply = false,
+    String? notes,
+    String? contactId,
+    double? tax,
+    int? totalOccurrences,
   }) async {
     if (_spaceId.isEmpty) return null;
     final code = (currency ?? DisplayCurrency.code).toUpperCase();
@@ -407,6 +418,11 @@ class RecurringController extends ChangeNotifier {
         originalAmount: amount.abs(),
         originalCurrency: code,
         autoApply: autoApply,
+        notes: notes,
+        contactId: contactId,
+        tax: tax,
+        totalOccurrences: totalOccurrences,
+        remainingOccurrences: totalOccurrences,
       );
       _items = [..._items, row];
       notifyListeners();
@@ -430,6 +446,10 @@ class RecurringController extends ChangeNotifier {
         'status': 'Pending',
         'currency': code,
         'autoApply': autoApply,
+        if (notes != null) 'notes': notes,
+        if (contactId != null) 'contactId': contactId,
+        if (tax != null) 'tax': tax,
+        if (totalOccurrences != null) 'totalOccurrences': totalOccurrences,
       },
     );
     if (decoded is! Map<String, dynamic>) return null;
@@ -466,6 +486,24 @@ class RecurringController extends ChangeNotifier {
             t.originalAmount,
         originalCurrency: currency ?? t.originalCurrency,
         autoApply: body['autoApply'] as bool? ?? t.autoApply,
+        notes: body.containsKey('notes')
+            ? (body['notes'] as String?)
+            : t.notes,
+        clearNotes: body.containsKey('notes') && body['notes'] == null,
+        contactId: body.containsKey('contactId')
+            ? (body['contactId'] as String?)
+            : t.contactId,
+        clearContactId:
+            body.containsKey('contactId') && body['contactId'] == null,
+        tax: body.containsKey('tax')
+            ? (body['tax'] as num?)?.toDouble()
+            : t.tax,
+        clearTax: body.containsKey('tax') && body['tax'] == null,
+        totalOccurrences: body.containsKey('totalOccurrences')
+            ? (body['totalOccurrences'] as num?)?.toInt()
+            : t.totalOccurrences,
+        clearTotalOccurrences: body.containsKey('totalOccurrences') &&
+            body['totalOccurrences'] == null,
       );
       _items = [..._items]..[idx] = updated;
       notifyListeners();

@@ -223,6 +223,7 @@ class InvoicesController extends ChangeNotifier {
     String? accountId,
     String? categoryId,
     String? contactId,
+    bool clearContactId = false,
     String? notes,
   }) async {
     if (_auth.isFake) {
@@ -245,7 +246,7 @@ class InvoicesController extends ChangeNotifier {
         amountRemaining: (amt - paid).clamp(0, double.infinity),
         accountId: accountId ?? t.accountId,
         categoryId: categoryId ?? t.categoryId,
-        contactId: contactId ?? t.contactId,
+        contactId: clearContactId ? null : (contactId ?? t.contactId),
         notes: notes ?? t.notes,
       );
       _items = [..._items]..[idx] = updated;
@@ -267,7 +268,11 @@ class InvoicesController extends ChangeNotifier {
     if (currency != null) body['currency'] = currency.toUpperCase();
     if (accountId != null) body['accountId'] = accountId;
     if (categoryId != null) body['categoryId'] = categoryId;
-    if (contactId != null) body['contactId'] = contactId;
+    if (clearContactId) {
+      body['contactId'] = null;
+    } else if (contactId != null) {
+      body['contactId'] = contactId;
+    }
     if (notes != null) body['notes'] = notes;
 
     final decoded = await _auth.apiDecode(

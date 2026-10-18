@@ -3,9 +3,13 @@ import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
 import '../accounts_controller.dart';
+import '../contact_picker.dart';
+import '../contacts_controller.dart';
+import '../contacts_scope.dart';
 import '../dash_colors.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
+import '../download_menu.dart';
 import '../filter_sort.dart';
 import '../form_validation.dart';
 import '../invoices_controller.dart';
@@ -144,6 +148,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     var currency = kSupportedCurrencies.contains(existing?.currency ?? '')
         ? existing!.currency
         : DisplayCurrency.code;
+    final contacts = ContactsScope.maybeOf(context);
+    String? contactId = existing?.contactId;
     var fieldErrors = <String, String?>{};
 
     await showDashSheet<void>(
@@ -216,6 +222,15 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               hint: 'YYYY-MM-DD (optional)',
               errorText: fieldErrors['dueDate'],
             ),
+            if (contacts != null) ...[
+              const SizedBox(height: 14),
+              ContactPickerField(
+                contacts: contacts,
+                valueId: contactId,
+                kindFilter: ContactKind.customer,
+                onChanged: (id) => setSheetState(() => contactId = id),
+              ),
+            ],
             const SizedBox(height: 14),
             const DashFieldLabel('Notes'),
             DashTextField(
@@ -257,6 +272,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     clearDueDate: due.isEmpty,
                     originalAmount: amount,
                     currency: currency,
+                    contactId: contactId,
+                    clearContactId: contactId == null,
                     notes: notesCtrl.text.trim().isEmpty
                         ? null
                         : notesCtrl.text.trim(),
@@ -277,6 +294,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     dueDate: due.isEmpty ? null : due,
                     originalAmount: amount,
                     currency: currency,
+                    contactId: contactId,
                     notes: notesCtrl.text.trim().isEmpty
                         ? null
                         : notesCtrl.text.trim(),
@@ -449,6 +467,42 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     toast(context, removed ? 'Invoice deleted' : 'Could not delete');
   }
 
+  Future<void> _exportTable() {
+    final contacts = ContactsScope.maybeOf(context);
+    return showDownloadMenu(
+      context: context,
+      filename: 'invoices',
+      title: 'Invoices',
+      rows: [
+        [
+          'Number',
+          'Description',
+          'Customer',
+          'Status',
+          'Issue date',
+          'Due date',
+          'Amount',
+          'Remaining',
+          'Currency',
+          'Notes',
+        ],
+        for (final b in _filtered)
+          [
+            b.number,
+            b.description,
+            contacts?.byId(b.contactId)?.name ?? '',
+            _statusLabel(b.status),
+            b.issueDate,
+            b.dueDate ?? '',
+            b.originalAmount.toStringAsFixed(2),
+            b.amountRemaining.toStringAsFixed(2),
+            b.currency,
+            b.notes ?? '',
+          ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _filtered;
@@ -473,6 +527,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             DashFeedChrome(
               title: 'Invoices',
               subtitle: subtitle,
+              onSecondary: filtered.isEmpty ? null : _exportTable,
               onPrimary: () => _openEditor(),
               primaryTooltip: 'Add invoice',
               primaryEnabled: canWrite,

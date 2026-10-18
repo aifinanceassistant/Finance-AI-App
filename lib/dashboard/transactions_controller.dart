@@ -152,6 +152,15 @@ class TransactionsController extends ChangeNotifier {
     }
   }
 
+  static List<TxnLineItem>? _lineItemsFromJson(dynamic raw) {
+    if (raw is! List) return null;
+    final items = <TxnLineItem>[];
+    for (final item in raw) {
+      if (item is Map<String, dynamic>) items.add(TxnLineItem.fromJson(item));
+    }
+    return items.isEmpty ? null : items;
+  }
+
   static DemoTxn fromJson(Map<String, dynamic> json) {
     final merchant = (json['merchant'] as String?)?.trim() ?? 'Transaction';
     final category = (json['category'] as String?)?.trim() ?? 'Uncategorized';
@@ -162,6 +171,9 @@ class TransactionsController extends ChangeNotifier {
     final originalAmount = (json['originalAmount'] as num?)?.toDouble();
     final originalCurrencyRaw =
         (json['originalCurrency'] as String?)?.trim().toUpperCase();
+    final notes = (json['notes'] as String?)?.trim();
+    final contactId = json['contactId'] as String?;
+    final tax = (json['tax'] as num?)?.toDouble();
     return DemoTxn(
       id: json['id'] as String? ?? '',
       merchant: merchant,
@@ -178,6 +190,10 @@ class TransactionsController extends ChangeNotifier {
           originalCurrencyRaw != null && originalCurrencyRaw.isNotEmpty
               ? originalCurrencyRaw
               : null,
+      notes: notes?.isEmpty == true ? null : notes,
+      contactId: contactId?.isEmpty == true ? null : contactId,
+      tax: tax,
+      lineItems: _lineItemsFromJson(json['lineItems']),
     );
   }
 
@@ -279,6 +295,10 @@ class TransactionsController extends ChangeNotifier {
     String? date,
     String? accountLabel,
     String? currency,
+    String? notes,
+    String? contactId,
+    double? tax,
+    List<TxnLineItem>? lineItems,
   }) async {
     final code = (currency ?? DisplayCurrency.code).toUpperCase();
     if (_auth.isFake) {
@@ -296,6 +316,10 @@ class TransactionsController extends ChangeNotifier {
         type: type,
         originalAmount: amount.abs(),
         originalCurrency: code,
+        notes: notes,
+        contactId: contactId,
+        tax: tax,
+        lineItems: lineItems,
       );
       _txns = [row, ..._txns];
       notifyListeners();
@@ -313,6 +337,11 @@ class TransactionsController extends ChangeNotifier {
       'type': _dbType(type),
       'status': 'Succeeded',
       if (date != null && date.isNotEmpty) 'date': date,
+      if (notes != null) 'notes': notes,
+      if (contactId != null) 'contactId': contactId,
+      if (tax != null) 'tax': tax,
+      if (lineItems != null)
+        'lineItems': lineItems.map((e) => e.toJson()).toList(),
     };
     final decoded = await _auth.apiDecode(
       'POST',
@@ -342,10 +371,30 @@ class TransactionsController extends ChangeNotifier {
     required String category,
     required MoneyMove type,
     required bool reconciled,
+    String? notes,
+    String? contactId,
+    bool clearContactId = false,
+    double? tax,
+    bool clearTax = false,
+    List<TxnLineItem>? lineItems,
+    bool clearLineItems = false,
   }) async {
     final body = <String, dynamic>{
       'category': category,
       'type': _dbType(type),
+      if (notes != null) 'notes': notes,
+      if (clearContactId)
+        'contactId': null
+      else if (contactId != null)
+        'contactId': contactId,
+      if (clearTax)
+        'tax': null
+      else if (tax != null)
+        'tax': tax,
+      if (clearLineItems)
+        'lineItems': null
+      else if (lineItems != null)
+        'lineItems': lineItems.map((e) => e.toJson()).toList(),
     };
     if (reconciled) body['status'] = _dbStatus(TxnStatus.succeeded);
     await patch(id, body);

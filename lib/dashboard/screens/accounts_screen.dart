@@ -10,6 +10,7 @@ import '../accounts_controller.dart';
 import '../accounts_scope.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
+import '../download_menu.dart';
 import '../filter_sort.dart';
 import '../form_validation.dart';
 import '../shimmer.dart';
@@ -101,6 +102,29 @@ class _AccountsScreenState extends State<AccountsScreen> {
         applySearch(_accounts, _search, _filterFields, _accountValue);
     final filtered = applyFilters(searched, _filterRules, _accountValue);
     return applySort(filtered, _sortRules, _accountValue);
+  }
+
+  Future<void> _exportTable() {
+    return showDownloadMenu(
+      context: context,
+      filename: 'accounts',
+      title: 'Accounts',
+      rows: [
+        ['Institution', 'Account', 'Type', 'Number', 'Balance', 'Currency', 'Status', 'Provider', 'Synced'],
+        for (final a in _filtered)
+          [
+            a.bank,
+            a.displayName,
+            a.type,
+            a.number,
+            (a.originalBalance ?? a.balance).toStringAsFixed(2),
+            a.nativeCurrency,
+            _accountStatusLabel(a),
+            a.provider == 'plaid' ? 'Plaid' : 'Manual',
+            a.synced,
+          ],
+      ],
+    );
   }
 
   List<({String institution, List<DemoAccount> accounts, String totalLabel})>
@@ -1266,6 +1290,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
           onSecondary: _refreshAll,
           secondaryIcon: Icons.sync_rounded,
           secondaryTooltip: 'Refresh all',
+          extraActions: [
+            IconButton(
+              onPressed: _filtered.isEmpty ? null : _exportTable,
+              tooltip: 'Export',
+              icon: const Icon(Icons.download_outlined, size: 22),
+              color: context.dashInk,
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
           onPrimary: _openConnectSheet,
           primaryTooltip: 'Connect bank',
           primaryEnabled: canWrite,

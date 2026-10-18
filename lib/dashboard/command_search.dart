@@ -31,6 +31,7 @@ enum CommandPage {
   investments,
   recurring,
   documents,
+  contacts,
   team,
 }
 
@@ -551,6 +552,12 @@ const _pages = <_PageDef>[
     label: 'Documents',
     icon: Icons.attach_file_rounded,
     page: CommandPage.documents,
+  ),
+  _PageDef(
+    name: 'contacts',
+    label: 'Contacts',
+    icon: Icons.contacts_outlined,
+    page: CommandPage.contacts,
   ),
   _PageDef(
     name: 'team',

@@ -148,6 +148,7 @@ class DashTextField extends StatelessWidget {
     this.obscureText = false,
     this.inputFormatters,
     this.errorText,
+    this.maxLines = 1,
   });
 
   final TextEditingController controller;
@@ -157,6 +158,7 @@ class DashTextField extends StatelessWidget {
   final bool obscureText;
   final List<TextInputFormatter>? inputFormatters;
   final String? errorText;
+  final int maxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -169,7 +171,9 @@ class DashTextField extends StatelessWidget {
       controller: controller,
       autofocus: autofocus,
       obscureText: obscureText,
-      keyboardType: keyboardType,
+      keyboardType: maxLines > 1 ? (keyboardType ?? TextInputType.multiline) : keyboardType,
+      maxLines: obscureText ? 1 : maxLines,
+      minLines: obscureText || maxLines <= 1 ? null : maxLines,
       inputFormatters: inputFormatters,
       style: TextStyle(
         color: context.dashInk,

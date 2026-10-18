@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
+import '../contact_picker.dart';
+import '../contacts_controller.dart';
+import '../contacts_scope.dart';
 import '../dash_colors.dart';
 import '../dash_sheets.dart';
 import '../data.dart';
+import '../download_menu.dart';
 import '../filter_sort.dart';
 import '../form_validation.dart';
 import '../recurring_controller.dart';
@@ -54,6 +58,63 @@ Widget _autoApplySwitch({
     value: value,
     onChanged: onChanged,
   );
+}
+
+List<Widget> _detailFields({
+  required TextEditingController taxCtrl,
+  required TextEditingController totalCtrl,
+  required TextEditingController notesCtrl,
+  required Map<String, String?> fieldErrors,
+}) {
+  return [
+    const SizedBox(height: 14),
+    Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const DashFieldLabel('Tax'),
+              DashTextField(
+                controller: taxCtrl,
+                hint: 'Optional',
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                ],
+                errorText: fieldErrors['tax'],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const DashFieldLabel('Total occurrences'),
+              DashTextField(
+                controller: totalCtrl,
+                hint: 'Optional',
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                errorText: fieldErrors['total'],
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+    const SizedBox(height: 14),
+    const DashFieldLabel('Notes'),
+    DashTextField(
+      controller: notesCtrl,
+      hint: 'Optional memo',
+      maxLines: 3,
+    ),
+  ];
 }
 
 String _statusLabel(TxnStatus status) {
@@ -150,6 +211,28 @@ class _RecurringScreenState extends State<RecurringScreen> {
     return Map.fromEntries(entries);
   }
 
+  Future<void> _exportTable() {
+    return showDownloadMenu(
+      context: context,
+      filename: 'recurring',
+      title: 'Recurring',
+      rows: [
+        ['Name', 'Type', 'Amount', 'Cadence', 'Next', 'Category', 'Account', 'Notes'],
+        for (final r in _filtered)
+          [
+            r.name,
+            moneyMoveLabel(r.type),
+            '${(r.originalAmount ?? r.amount.abs()).toStringAsFixed(2)} ${r.originalCurrency ?? 'USD'}',
+            r.cadence,
+            r.next,
+            r.category,
+            r.account,
+            r.notes ?? '',
+          ],
+      ],
+    );
+  }
+
   Future<void> _openFixesSheet() async {
     await _ctrl.loadFixes();
     if (!mounted) return;
@@ -232,6 +315,11 @@ class _RecurringScreenState extends State<RecurringScreen> {
     final nextCtrl = TextEditingController();
     final startCtrl = TextEditingController();
     final endCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    final taxCtrl = TextEditingController();
+    final totalCtrl = TextEditingController();
+    final contacts = ContactsScope.maybeOf(context);
+    String? contactId;
     var cadence = 'Monthly';
     var type = MoneyMove.expense;
     var currency = DisplayCurrency.code;
@@ -261,8 +349,20 @@ class _RecurringScreenState extends State<RecurringScreen> {
               value: type,
               items: MoneyMove.values,
               labelOf: moneyMoveLabel,
-              onChanged: (v) => setSheetState(() => type = v),
+              onChanged: (v) => setSheetState(() {
+                type = v;
+                contactId = null;
+              }),
             ),
+            if (contacts != null) ...[
+              const SizedBox(height: 14),
+              ContactPickerField(
+                contacts: contacts,
+                valueId: contactId,
+                kindFilter: contactKindForMoneyMove(type == MoneyMove.income),
+                onChanged: (id) => setSheetState(() => contactId = id),
+              ),
+            ],
             const SizedBox(height: 14),
             const DashFieldLabel('Amount'),
             Row(
@@ -365,6 +465,12 @@ class _RecurringScreenState extends State<RecurringScreen> {
               hint: 'YYYY-MM-DD',
               errorText: fieldErrors['next'],
             ),
+            ..._detailFields(
+              taxCtrl: taxCtrl,
+              totalCtrl: totalCtrl,
+              notesCtrl: notesCtrl,
+              fieldErrors: fieldErrors,
+            ),
             const SizedBox(height: 8),
             _autoApplySwitch(
               value: autoApply,
@@ -391,12 +497,20 @@ class _RecurringScreenState extends State<RecurringScreen> {
               final startErr = optionalIsoDate(startCtrl.text, 'Start date');
               final endErr = optionalIsoDate(endCtrl.text, 'End date');
               final nextErr = optionalIsoDate(nextCtrl.text, 'Next date');
+              final taxText = taxCtrl.text.trim();
+              final parsedTax = taxText.isEmpty ? null : double.tryParse(taxText);
+              final totalText = totalCtrl.text.trim();
+              final parsedTotal = totalText.isEmpty ? null : int.tryParse(totalText);
               final errors = <String, String?>{
                 if (nameErr != null) 'name': nameErr,
                 if (amountErr != null) 'amount': amountErr,
                 if (startErr != null) 'start': startErr,
                 if (endErr != null) 'end': endErr,
                 if (nextErr != null) 'next': nextErr,
+                if (taxText.isNotEmpty && parsedTax == null)
+                  'tax': 'Enter a valid tax amount',
+                if (totalText.isNotEmpty && (parsedTotal == null || parsedTotal < 1))
+                  'total': 'Enter a whole number of 1 or more',
               };
               setLocal?.call(() => fieldErrors = errors);
               if (hasFieldErrors(errors)) {
@@ -427,6 +541,12 @@ class _RecurringScreenState extends State<RecurringScreen> {
                 type: type,
                 currency: currency,
                 autoApply: autoApply,
+                notes: notesCtrl.text.trim().isEmpty
+                    ? null
+                    : notesCtrl.text.trim(),
+                contactId: contactId,
+                tax: parsedTax,
+                totalOccurrences: parsedTotal,
               );
               if (!mounted) return;
               if (created == null) {
@@ -448,6 +568,9 @@ class _RecurringScreenState extends State<RecurringScreen> {
     nextCtrl.dispose();
     startCtrl.dispose();
     endCtrl.dispose();
+    notesCtrl.dispose();
+    taxCtrl.dispose();
+    totalCtrl.dispose();
   }
 
   Future<void> _openManageSheet(DemoRecurring item) async {
@@ -458,6 +581,15 @@ class _RecurringScreenState extends State<RecurringScreen> {
     final nextCtrl = TextEditingController(text: item.next);
     final startCtrl = TextEditingController(text: item.start);
     final endCtrl = TextEditingController(text: item.end);
+    final notesCtrl = TextEditingController(text: item.notes ?? '');
+    final taxCtrl = TextEditingController(
+      text: item.tax != null ? '${item.tax}' : '',
+    );
+    final totalCtrl = TextEditingController(
+      text: item.totalOccurrences != null ? '${item.totalOccurrences}' : '',
+    );
+    final contacts = ContactsScope.maybeOf(context);
+    String? contactId = item.contactId;
     var cadence = item.cadence;
     var type = item.type;
     var currency = kSupportedCurrencies.contains(
@@ -497,8 +629,20 @@ class _RecurringScreenState extends State<RecurringScreen> {
               value: type,
               items: MoneyMove.values,
               labelOf: moneyMoveLabel,
-              onChanged: (v) => setSheetState(() => type = v),
+              onChanged: (v) => setSheetState(() {
+                type = v;
+                contactId = null;
+              }),
             ),
+            if (contacts != null) ...[
+              const SizedBox(height: 14),
+              ContactPickerField(
+                contacts: contacts,
+                valueId: contactId,
+                kindFilter: contactKindForMoneyMove(type == MoneyMove.income),
+                onChanged: (id) => setSheetState(() => contactId = id),
+              ),
+            ],
             const SizedBox(height: 14),
             const DashFieldLabel('Amount'),
             Row(
@@ -577,6 +721,12 @@ class _RecurringScreenState extends State<RecurringScreen> {
               hint: 'YYYY-MM-DD',
               errorText: fieldErrors['next'],
             ),
+            ..._detailFields(
+              taxCtrl: taxCtrl,
+              totalCtrl: totalCtrl,
+              notesCtrl: notesCtrl,
+              fieldErrors: fieldErrors,
+            ),
             const SizedBox(height: 8),
             _autoApplySwitch(
               value: autoApply,
@@ -644,12 +794,20 @@ class _RecurringScreenState extends State<RecurringScreen> {
                   isoOrUnchangedLegacy(endCtrl.text, item.end, 'End date');
               final nextErr =
                   isoOrUnchangedLegacy(nextCtrl.text, item.next, 'Next date');
+              final taxText = taxCtrl.text.trim();
+              final parsedTax = taxText.isEmpty ? null : double.tryParse(taxText);
+              final totalText = totalCtrl.text.trim();
+              final parsedTotal = totalText.isEmpty ? null : int.tryParse(totalText);
               final errors = <String, String?>{
                 if (nameErr != null) 'name': nameErr,
                 if (amountErr != null) 'amount': amountErr,
                 if (startErr != null) 'start': startErr,
                 if (endErr != null) 'end': endErr,
                 if (nextErr != null) 'next': nextErr,
+                if (taxText.isNotEmpty && parsedTax == null)
+                  'tax': 'Enter a valid tax amount',
+                if (totalText.isNotEmpty && (parsedTotal == null || parsedTotal < 1))
+                  'total': 'Enter a whole number of 1 or more',
               };
               setLocal?.call(() => fieldErrors = errors);
               if (hasFieldErrors(errors)) {
@@ -673,6 +831,12 @@ class _RecurringScreenState extends State<RecurringScreen> {
                 'type': moneyMoveLabel(type),
                 'currency': currency,
                 'autoApply': autoApply,
+                'notes': notesCtrl.text.trim().isEmpty
+                    ? null
+                    : notesCtrl.text.trim(),
+                'contactId': contactId,
+                'tax': parsedTax,
+                'totalOccurrences': parsedTotal,
               });
               if (!mounted) return;
               if (updated == null) {
@@ -692,6 +856,9 @@ class _RecurringScreenState extends State<RecurringScreen> {
     nextCtrl.dispose();
     startCtrl.dispose();
     endCtrl.dispose();
+    notesCtrl.dispose();
+    taxCtrl.dispose();
+    totalCtrl.dispose();
   }
 
   Future<void> _openCalendarSheet() async {
@@ -845,6 +1012,13 @@ class _RecurringScreenState extends State<RecurringScreen> {
             secondaryIcon: Icons.auto_awesome_outlined,
             secondaryTooltip: 'Suggested fixes',
             extraActions: [
+              IconButton(
+                onPressed: _exportTable,
+                tooltip: 'Export',
+                icon: const Icon(Icons.download_outlined, size: 22),
+                color: context.dashInk,
+                visualDensity: VisualDensity.compact,
+              ),
               IconButton(
                 onPressed: _openCalendarSheet,
                 tooltip: 'Upcoming transactions',
