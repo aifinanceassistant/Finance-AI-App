@@ -194,35 +194,3 @@ Future<String?> updateCategoryBudget(
   );
   return res.ok ? null : res.error;
 }
-
-/// Monthly recurring income or expense tracked against [accountId].
-Future<String?> createMonthlyRecurring(
-  AuthController auth,
-  String spaceId, {
-  required String name,
-  required double amount,
-  required bool income,
-  required String category,
-  required DateTime nextDate,
-  String? accountId,
-}) async {
-  if (auth.isFake) return null;
-  final ymd =
-      '${nextDate.year.toString().padLeft(4, '0')}-${nextDate.month.toString().padLeft(2, '0')}-${nextDate.day.toString().padLeft(2, '0')}';
-  final res = await auth.apiRequest(
-    'POST',
-    '/api/recurring',
-    body: {
-      'portfolioId': spaceId,
-      'name': name,
-      'amount': amount,
-      'type': income ? 'Income' : 'Expense',
-      'category': category,
-      'cadence': 'Monthly',
-      'status': 'Active',
-      'nextDate': ymd,
-      'accountId': ?accountId,
-    },
-  );
-  return res.ok ? null : res.error;
-}

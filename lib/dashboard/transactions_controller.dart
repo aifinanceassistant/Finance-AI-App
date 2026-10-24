@@ -28,11 +28,11 @@ class TxnDocument {
   final double? transactionAmount;
 
   String get kindLabel => switch (kind) {
-        'invoice' => 'Invoice',
-        'bill' => 'Bill',
-        'other' => 'Other',
-        _ => 'Receipt',
-      };
+    'invoice' => 'Invoice',
+    'bill' => 'Bill',
+    'other' => 'Other',
+    _ => 'Receipt',
+  };
 
   static TxnDocument fromJson(Map<String, dynamic> json) {
     return TxnDocument(
@@ -45,8 +45,8 @@ class TxnDocument {
       transactionDescription: json['transactionDescription'] as String?,
       transactionDate: json['transactionDate'] is String
           ? (json['transactionDate'] as String).length >= 10
-              ? (json['transactionDate'] as String).substring(0, 10)
-              : json['transactionDate'] as String
+                ? (json['transactionDate'] as String).substring(0, 10)
+                : json['transactionDate'] as String
           : null,
       transactionAmount: (json['transactionAmount'] as num?)?.toDouble(),
     );
@@ -85,8 +85,18 @@ class TransactionsController extends ChangeNotifier {
     if (diff == 0) return 'Today';
     if (diff == 1) return 'Yesterday';
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[d.month - 1]} ${d.day}';
   }
@@ -169,8 +179,9 @@ class TransactionsController extends ChangeNotifier {
     final date = (json['date'] as String?) ?? '';
     final dateIso = date.length >= 10 ? date.substring(0, 10) : date;
     final originalAmount = (json['originalAmount'] as num?)?.toDouble();
-    final originalCurrencyRaw =
-        (json['originalCurrency'] as String?)?.trim().toUpperCase();
+    final originalCurrencyRaw = (json['originalCurrency'] as String?)
+        ?.trim()
+        .toUpperCase();
     final notes = (json['notes'] as String?)?.trim();
     final contactId = json['contactId'] as String?;
     final tax = (json['tax'] as num?)?.toDouble();
@@ -188,8 +199,8 @@ class TransactionsController extends ChangeNotifier {
       originalAmount: originalAmount,
       originalCurrency:
           originalCurrencyRaw != null && originalCurrencyRaw.isNotEmpty
-              ? originalCurrencyRaw
-              : null,
+          ? originalCurrencyRaw
+          : null,
       notes: notes?.isEmpty == true ? null : notes,
       contactId: contactId?.isEmpty == true ? null : contactId,
       tax: tax,
@@ -216,7 +227,6 @@ class TransactionsController extends ChangeNotifier {
     _loading = true;
     notifyListeners();
     try {
-      await _processDueIfNeeded(spaceId);
       final decoded = await _auth.apiDecode(
         'GET',
         '/api/transactions?portfolio_id=${Uri.encodeQueryComponent(spaceId)}',
@@ -228,10 +238,7 @@ class TransactionsController extends ChangeNotifier {
         }
       }
       _txns = list;
-      await prefetchFxRates(
-        _auth,
-        list.map((t) => t.originalCurrency),
-      );
+      await prefetchFxRates(_auth, list.map((t) => t.originalCurrency));
     } catch (e) {
       debugPrint('TransactionsController.load: $e');
       _txns = [];
@@ -255,10 +262,10 @@ class TransactionsController extends ChangeNotifier {
             : t.approvalStatus,
         type: body['type'] != null
             ? (body['type'] == 'Income' || body['type'] == 'income'
-                ? MoneyMove.income
-                : body['type'] == 'Transfer' || body['type'] == 'transfer'
-                    ? MoneyMove.transfer
-                    : MoneyMove.expense)
+                  ? MoneyMove.income
+                  : body['type'] == 'Transfer' || body['type'] == 'transfer'
+                  ? MoneyMove.transfer
+                  : MoneyMove.expense)
             : t.type,
       );
       _txns = [..._txns]..[idx] = updated;
@@ -273,7 +280,10 @@ class TransactionsController extends ChangeNotifier {
     );
     if (decoded is! Map<String, dynamic>) return null;
     final row = fromJson(decoded);
-    _txns = [for (final t in _txns) if (t.id == id) row else t];
+    _txns = [
+      for (final t in _txns)
+        if (t.id == id) row else t,
+    ];
     notifyListeners();
     return row;
   }
@@ -387,10 +397,7 @@ class TransactionsController extends ChangeNotifier {
         'contactId': null
       else if (contactId != null)
         'contactId': contactId,
-      if (clearTax)
-        'tax': null
-      else if (tax != null)
-        'tax': tax,
+      if (clearTax) 'tax': null else if (tax != null) 'tax': tax,
       if (clearLineItems)
         'lineItems': null
       else if (lineItems != null)
@@ -481,19 +488,17 @@ class TransactionsController extends ChangeNotifier {
     return res.ok;
   }
 
-  Future<void> _processDueIfNeeded(String spaceId) async {
-    if (_auth.isFake || spaceId.isEmpty) return;
-    final now = DateTime.now();
-    final asOf =
-        '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    try {
-      await _auth.apiDecode(
-        'POST',
-        '/api/recurring/process-due',
-        body: {'portfolioId': spaceId, 'asOf': asOf},
-      );
-    } catch (e) {
-      debugPrint('TransactionsController.processDue: $e');
+  Future<Map<String, dynamic>> recurringAnalysis() async {
+    if (_auth.isFake) {
+      return {'patterns': [], 'totals': [], 'transactionsAnalyzed': 0};
     }
+    final decoded = await _auth.apiDecode(
+      'GET',
+      '/api/transactions/recurring-analysis?portfolio_id=${Uri.encodeQueryComponent(_spaceId)}',
+    );
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Could not load recurring analysis');
+    }
+    return decoded;
   }
 }

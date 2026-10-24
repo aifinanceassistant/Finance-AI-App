@@ -10,8 +10,6 @@ import 'goals_controller.dart';
 import 'goals_scope.dart';
 import 'investments_controller.dart';
 import 'investments_scope.dart';
-import 'recurring_controller.dart';
-import 'recurring_scope.dart';
 import 'shell.dart';
 import 'spaces.dart';
 import 'spaces_scope.dart';
@@ -29,7 +27,6 @@ enum CommandPage {
   reports,
   goals,
   investments,
-  recurring,
   documents,
   contacts,
   team,
@@ -45,26 +42,24 @@ Future<void> showCommandSearch(
   ValueChanged<String>? onSelectSpace,
 }) {
   // Use getInherited* (not dependOn*) — this runs from a tap handler, not build.
-  final spaces = context.getInheritedWidgetOfExactType<SpacesScope>()?.notifier ??
+  final spaces =
+      context.getInheritedWidgetOfExactType<SpacesScope>()?.notifier ??
       SpacesController.fake();
   final transactions =
       context.getInheritedWidgetOfExactType<TransactionsScope>()?.notifier ??
-          TransactionsController.fake();
+      TransactionsController.fake();
   final accounts =
       context.getInheritedWidgetOfExactType<AccountsScope>()?.notifier ??
-          AccountsController.fake();
+      AccountsController.fake();
   final categories =
       context.getInheritedWidgetOfExactType<CategoriesScope>()?.notifier ??
-          CategoriesController.fake();
+      CategoriesController.fake();
   final goals =
       context.getInheritedWidgetOfExactType<GoalsScope>()?.notifier ??
-          GoalsController.fake();
+      GoalsController.fake();
   final investments =
       context.getInheritedWidgetOfExactType<InvestmentsScope>()?.notifier ??
-          InvestmentsController.fake();
-  final recurring =
-      context.getInheritedWidgetOfExactType<RecurringScope>()?.notifier ??
-          RecurringController.fake();
+      InvestmentsController.fake();
 
   return showModalBottomSheet<void>(
     context: context,
@@ -87,13 +82,10 @@ Future<void> showCommandSearch(
                 controller: goals,
                 child: InvestmentsScope(
                   controller: investments,
-                  child: RecurringScope(
-                    controller: recurring,
-                    child: _CommandSearchSheet(
-                      onSelectTab: onSelectTab,
-                      onOpenPage: onOpenPage,
-                      onSelectSpace: onSelectSpace,
-                    ),
+                  child: _CommandSearchSheet(
+                    onSelectTab: onSelectTab,
+                    onOpenPage: onOpenPage,
+                    onSelectSpace: onSelectSpace,
                   ),
                 ),
               ),
@@ -174,7 +166,6 @@ class _CommandSearchSheetState extends State<_CommandSearchSheet> {
     final categories = CategoriesScope.of(context).categories;
     final goals = GoalsScope.of(context).goals;
     final holdings = InvestmentsScope.of(context).holdings;
-    final recurring = RecurringScope.of(context).items;
 
     final hits = <_CommandHit>[
       const _CommandHit(
@@ -278,19 +269,6 @@ class _CommandSearchSheetState extends State<_CommandSearchSheet> {
       );
     }
 
-    for (final r in recurring) {
-      hits.add(
-        _CommandHit(
-          id: 'rec-${r.id}',
-          title: r.name,
-          subtitle: 'Next ${r.next} · ${r.category}',
-          group: 'Recurring',
-          icon: Icons.autorenew_rounded,
-          page: CommandPage.recurring,
-        ),
-      );
-    }
-
     return hits;
   }
 
@@ -372,7 +350,9 @@ class _CommandSearchSheetState extends State<_CommandSearchSheet> {
             child: filtered.isEmpty
                 ? Center(
                     child: Text(
-                      q.isEmpty ? 'Nothing to search yet' : 'No matches for “$q”',
+                      q.isEmpty
+                          ? 'Nothing to search yet'
+                          : 'No matches for “$q”',
                       style: TextStyle(
                         color: context.dashSoftMute,
                         fontSize: 13,
@@ -460,10 +440,10 @@ class _CommandSearchSheetState extends State<_CommandSearchSheet> {
 }
 
 String _statusLabel(TxnStatus s) => switch (s) {
-      TxnStatus.succeeded => 'Succeeded',
-      TxnStatus.pending => 'Pending',
-      TxnStatus.failed => 'Failed',
-    };
+  TxnStatus.succeeded => 'Succeeded',
+  TxnStatus.pending => 'Pending',
+  TxnStatus.failed => 'Failed',
+};
 
 class _PageDef {
   const _PageDef({
@@ -540,12 +520,6 @@ const _pages = <_PageDef>[
     label: 'Investments',
     icon: Icons.trending_up_rounded,
     page: CommandPage.investments,
-  ),
-  _PageDef(
-    name: 'recurring',
-    label: 'Recurring',
-    icon: Icons.autorenew_rounded,
-    page: CommandPage.recurring,
   ),
   _PageDef(
     name: 'documents',

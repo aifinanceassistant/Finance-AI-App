@@ -11,7 +11,6 @@ import '../ui.dart';
 class MoreScreen extends StatelessWidget {
   const MoreScreen({
     super.key,
-    required this.onRecurring,
     required this.onInvestments,
     required this.onGoals,
     required this.onReports,
@@ -30,7 +29,6 @@ class MoreScreen extends StatelessWidget {
     this.showInvestments = true,
   });
 
-  final VoidCallback onRecurring;
   final VoidCallback onInvestments;
   final VoidCallback onGoals;
   final VoidCallback onReports;
@@ -71,7 +69,9 @@ class MoreScreen extends StatelessWidget {
                 'FAQ',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
-              subtitle: const Text('Common questions about linking and billing'),
+              subtitle: const Text(
+                'Common questions about linking and billing',
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 // ignore: discarded_futures
@@ -101,17 +101,16 @@ class MoreScreen extends StatelessWidget {
                 'Contact support',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
-              subtitle: const Text('support@financeai.app · usually under 1 day'),
+              subtitle: const Text(
+                'support@financeai.app · usually under 1 day',
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 toast(context, 'Support chat opening…');
               },
             ),
             const SizedBox(height: 12),
-            GhostButton(
-              label: 'Close',
-              onPressed: () => Navigator.pop(ctx),
-            ),
+            GhostButton(label: 'Close', onPressed: () => Navigator.pop(ctx)),
           ],
         );
       },
@@ -125,11 +124,6 @@ class MoreScreen extends StatelessWidget {
         showInvestments || (spaces?.hasFeature('investments') ?? false);
 
     return [
-      _MoreDest(
-        icon: Icons.autorenew_rounded,
-        title: 'Recurring',
-        onTap: onRecurring,
-      ),
       if (investmentsUnlocked)
         _MoreDest(
           icon: Icons.trending_up_rounded,
@@ -143,11 +137,7 @@ class MoreScreen extends StatelessWidget {
           onTap: onManagePlan,
         ),
       if (goalsUnlocked)
-        _MoreDest(
-          icon: Icons.flag_outlined,
-          title: 'Goals',
-          onTap: onGoals,
-        )
+        _MoreDest(icon: Icons.flag_outlined, title: 'Goals', onTap: onGoals)
       else
         _MoreDest(
           icon: Icons.lock_outline_rounded,
@@ -219,35 +209,31 @@ class MoreScreen extends StatelessWidget {
       onRefresh: onRefresh ?? () async {},
       backgroundColor: context.dashPanel,
       child: ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 6, bottom: 6),
-          child: Text(
-            'Workspace',
-            style: TextStyle(
-              color: context.dashMute,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 6),
+            child: Text(
+              'Workspace',
+              style: TextStyle(
+                color: context.dashMute,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-        ),
-        for (final d in dests)
+          for (final d in dests)
+            _FeedRow(icon: d.icon, title: d.title, onTap: d.onTap),
+          const SizedBox(height: 8),
           _FeedRow(
-            icon: d.icon,
-            title: d.title,
-            onTap: d.onTap,
+            icon: Icons.logout_rounded,
+            title: 'Log out',
+            onTap: onLogout,
+            danger: true,
           ),
-        const SizedBox(height: 8),
-        _FeedRow(
-          icon: Icons.logout_rounded,
-          title: 'Log out',
-          onTap: onLogout,
-          danger: true,
-        ),
-      ],
-    ),
+        ],
+      ),
     );
   }
 }

@@ -22,6 +22,7 @@ import '../form_validation.dart';
 import '../shimmer.dart';
 import '../transactions_controller.dart';
 import '../transactions_scope.dart';
+import '../recurring_analysis_dialog.dart';
 import '../spaces_scope.dart';
 import '../ui.dart';
 
@@ -37,11 +38,7 @@ const _filterFields = [
     label: 'Category',
     type: FilterFieldType.select,
   ),
-  FilterFieldDef(
-    id: 'account',
-    label: 'Account',
-    type: FilterFieldType.select,
-  ),
+  FilterFieldDef(id: 'account', label: 'Account', type: FilterFieldType.select),
   FilterFieldDef(id: 'amount', label: 'Amount', type: FilterFieldType.number),
   FilterFieldDef(id: 'status', label: 'Status', type: FilterFieldType.select),
   FilterFieldDef(
@@ -101,10 +98,7 @@ Object? _txnValue(DemoTxn t, String field) {
 }
 
 class _CashBucket {
-  _CashBucket({
-    required this.key,
-    required this.label,
-  });
+  _CashBucket({required this.key, required this.label});
 
   final String key;
   final String label;
@@ -135,8 +129,18 @@ DateTime _todayLocal() {
 
 String _monthLabel(DateTime d) {
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   return "${months[d.month - 1]} ${d.year}";
 }
@@ -145,10 +149,7 @@ String _monthKey(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}';
 
 /// Trailing [months] ending at the current month (default 12).
-List<_CashBucket> _buildCashflowBuckets(
-  List<DemoTxn> txns, {
-  int months = 12,
-}) {
+List<_CashBucket> _buildCashflowBuckets(List<DemoTxn> txns, {int months = 12}) {
   final count = months < 1 ? 1 : months;
   final today = _todayLocal();
   final end = DateTime(today.year, today.month, 1, 12);
@@ -219,7 +220,8 @@ enum _CashMetric { inflow, outflow, net }
 
 enum _CashChartType { bars, line, area, step, combined }
 
-List<_CashChartType> _chartTypesFor(_CashMetric metric) => metric == _CashMetric.net
+List<_CashChartType> _chartTypesFor(_CashMetric metric) =>
+    metric == _CashMetric.net
     ? const [
         _CashChartType.combined,
         _CashChartType.bars,
@@ -235,12 +237,12 @@ List<_CashChartType> _chartTypesFor(_CashMetric metric) => metric == _CashMetric
       ];
 
 String _chartTypeLabel(_CashChartType t) => switch (t) {
-      _CashChartType.bars => 'Bars',
-      _CashChartType.line => 'Line',
-      _CashChartType.area => 'Area',
-      _CashChartType.step => 'Step',
-      _CashChartType.combined => 'Combined',
-    };
+  _CashChartType.bars => 'Bars',
+  _CashChartType.line => 'Line',
+  _CashChartType.area => 'Area',
+  _CashChartType.step => 'Step',
+  _CashChartType.combined => 'Combined',
+};
 
 class _CashBarsPainter extends CustomPainter {
   _CashBarsPainter({
@@ -273,9 +275,7 @@ class _CashBarsPainter extends CustomPainter {
     final gap = 1.0;
     final slot = ((size.width - gap * (n - 1)) / n).clamp(2.0, 80.0);
     final barGap = combined ? 1.0 : 0.0;
-    final barW = combined
-        ? math.max(1.5, (slot - barGap) / 2)
-        : slot;
+    final barW = combined ? math.max(1.5, (slot - barGap) / 2) : slot;
 
     double seriesOf(_CashBucket b) {
       if (metric == _CashMetric.inflow) return b.inflow;
@@ -286,19 +286,19 @@ class _CashBarsPainter extends CustomPainter {
     final seriesColor = metric == _CashMetric.outflow
         ? _outColor
         : metric == _CashMetric.net
-            ? _netColor
-            : _inColor;
+        ? _netColor
+        : _inColor;
 
     final scaleMax = combined
         ? buckets
-            .map((b) => math.max(b.inflow, math.max(b.outflow, b.net.abs())))
-            .reduce(math.max)
-            .clamp(1.0, double.infinity)
+              .map((b) => math.max(b.inflow, math.max(b.outflow, b.net.abs())))
+              .reduce(math.max)
+              .clamp(1.0, double.infinity)
         : buckets
-            .map(seriesOf)
-            .map((v) => v.abs())
-            .reduce(math.max)
-            .clamp(1.0, double.infinity);
+              .map(seriesOf)
+              .map((v) => v.abs())
+              .reduce(math.max)
+              .clamp(1.0, double.infinity);
 
     final yMin = combined
         ? math.min(0.0, buckets.map((b) => b.net).reduce(math.min))
@@ -440,9 +440,7 @@ class _CashBarsPainter extends CustomPainter {
           ..strokeJoin = StrokeJoin.round,
       );
       final fi = focus.clamp(0, n - 1);
-      final fy = combined
-          ? yAt(buckets[fi].net)
-          : yAt(seriesOf(buckets[fi]));
+      final fy = combined ? yAt(buckets[fi].net) : yAt(seriesOf(buckets[fi]));
       canvas.drawCircle(
         Offset(xCenter(fi), fy),
         3.5,
@@ -664,10 +662,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     if (field == 'approvalStatus') return _approvalLabels;
     if (field == 'type') return kMoneyMoveLabels;
     if (field == 'category') {
-      return [...{..._txns.map((t) => t.category)}].toList()..sort();
+      return [
+        ...{..._txns.map((t) => t.category)},
+      ].toList()..sort();
     }
     if (field == 'account') {
-      return [...{..._txns.map((t) => t.account)}].toList()..sort();
+      return [
+        ...{..._txns.map((t) => t.account)},
+      ].toList()..sort();
     }
     return [];
   }
@@ -777,8 +779,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 Expanded(
                   child: DashTextField(
                     controller: amountCtrl,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                     ],
@@ -803,8 +806,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             DashTextField(
               controller: taxCtrl,
               hint: 'Optional',
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
               ],
@@ -968,9 +972,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 final amountErr = positiveAmount(amountCtrl.text);
                 final dateErr = requiredIsoDate(dateCtrl.text);
                 final acct = selectedAccount();
-                final accountErr = acct == null
-                    ? 'Account is required.'
-                    : null;
+                final accountErr = acct == null ? 'Account is required.' : null;
                 final id = acct?.id?.trim() ?? '';
                 final errors = <String, String?>{
                   if (descErr != null) 'description': descErr,
@@ -1051,7 +1053,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 
   List<String> _categoryOptionsFor(DemoTxn t) {
-    final fromScope = context
+    final fromScope =
+        context
             .getInheritedWidgetOfExactType<CategoriesScope>()
             ?.notifier
             ?.categories
@@ -1227,8 +1230,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             DashTextField(
               controller: taxCtrl,
               hint: 'Optional',
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
               ],
@@ -1247,9 +1251,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 if (useLineItems && lineDesc.isEmpty) {
                   lineDesc.add(TextEditingController());
                   lineAmt.add(TextEditingController());
-                  lineIds.add(
-                    'line_${DateTime.now().millisecondsSinceEpoch}',
-                  );
+                  lineIds.add('line_${DateTime.now().millisecondsSinceEpoch}');
                 }
               }),
               child: Row(
@@ -1399,10 +1401,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 const SizedBox(width: 8),
                 GhostButton(
                   label: uploading ? '…' : 'Attach',
-                  onPressed: uploading ? null : () {
-                    // ignore: discarded_futures
-                    attach();
-                  },
+                  onPressed: uploading
+                      ? null
+                      : () {
+                          // ignore: discarded_futures
+                          attach();
+                        },
                 ),
               ],
             ),
@@ -1559,8 +1563,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                             ? lineIds[i]
                             : 'line_${DateTime.now().millisecondsSinceEpoch}_$i',
                         description: lineDesc[i].text.trim(),
-                        amount:
-                            double.tryParse(lineAmt[i].text.trim()) ?? 0,
+                        amount: double.tryParse(lineAmt[i].text.trim()) ?? 0,
                       ),
                 ];
                 if (lines.isEmpty) {
@@ -1611,8 +1614,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         final open = _txns
             .where(
               (t) =>
-                  t.status == TxnStatus.pending ||
-                  t.status == TxnStatus.failed,
+                  t.status == TxnStatus.pending || t.status == TxnStatus.failed,
             )
             .toList();
         if (open.isEmpty) {
@@ -1760,20 +1762,17 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   @override
   Widget build(BuildContext context) {
     final filtered = _filtered;
-    final kpiMonths =
-        _defaultCashTimeframe(filtered).monthsFor(filtered);
-    final kpiBuckets =
-        _buildCashflowBuckets(filtered, months: kpiMonths);
-    final inflow =
-        kpiBuckets.fold<double>(0, (s, b) => s + b.inflow);
-    final outflow =
-        kpiBuckets.fold<double>(0, (s, b) => s + b.outflow);
+    final kpiMonths = _defaultCashTimeframe(filtered).monthsFor(filtered);
+    final kpiBuckets = _buildCashflowBuckets(filtered, months: kpiMonths);
+    final inflow = kpiBuckets.fold<double>(0, (s, b) => s + b.inflow);
+    final outflow = kpiBuckets.fold<double>(0, (s, b) => s + b.outflow);
     final net = inflow - outflow;
 
     return Stack(
       children: [
         dashPullToRefresh(
-          onRefresh: widget.onRefresh ??
+          onRefresh:
+              widget.onRefresh ??
               () async {
                 final id = _ctrl.spaceId;
                 if (id.isEmpty) return;
@@ -1781,57 +1780,58 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               },
           backgroundColor: context.dashPanel,
           child: ListView(
-          controller: _scroll,
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.only(bottom: 28),
-          children: [
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 280),
-              curve: Curves.easeOut,
-              opacity: _stickyPinned ? 0.35 : 1,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_ctrl.loading)
-                    const DashLoadingBody(kpiCount: 2, listRows: 7)
-                  else
-                    _ActivityPageChrome(
-                      canWrite: SpacesScope.maybeOf(context)
-                              ?.can('transactions', 'write') !=
-                          false,
-                      search: _search,
-                      filterRules: _filterRules,
-                      sortRules: _sortRules,
-                      stickyPinned: _stickyPinned,
-                      selectOptions: _selectOptions,
-                      onSearchChanged: (v) => setState(() => _search = v),
-                      onRulesChanged: (r) =>
-                          setState(() => _filterRules = r),
-                      onSortsChanged: (s) =>
-                          setState(() => _sortRules = s),
-                      onExport: () {
-                        // ignore: discarded_futures
-                        _exportTable();
-                      },
-                      onReconcile: _openReconcileSheet,
-                      onAdd: _openAddSheet,
-                      inflow: inflow,
-                      outflow: outflow,
-                      filtered: filtered,
-                    ),
-                ],
-              ),
-            ),
-            if (!_ctrl.loading)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _ActivityPaymentsBody(
-                  filtered: filtered,
-                  onTxnTap: _openDetailSheet,
+            controller: _scroll,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 28),
+            children: [
+              AnimatedOpacity(
+                duration: const Duration(milliseconds: 280),
+                curve: Curves.easeOut,
+                opacity: _stickyPinned ? 0.35 : 1,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_ctrl.loading)
+                      const DashLoadingBody(kpiCount: 2, listRows: 7)
+                    else
+                      _ActivityPageChrome(
+                        canWrite:
+                            SpacesScope.maybeOf(context)
+                                ?.can('transactions', 'write') !=
+                            false,
+                        search: _search,
+                        filterRules: _filterRules,
+                        sortRules: _sortRules,
+                        stickyPinned: _stickyPinned,
+                        selectOptions: _selectOptions,
+                        onSearchChanged: (v) => setState(() => _search = v),
+                        onRulesChanged: (r) => setState(() => _filterRules = r),
+                        onSortsChanged: (s) => setState(() => _sortRules = s),
+                        onExport: () {
+                          // ignore: discarded_futures
+                          _exportTable();
+                        },
+                        onReconcile: _openReconcileSheet,
+                        onAdd: _openAddSheet,
+                        onRecurring: () =>
+                            showRecurringAnalysis(context, _ctrl),
+                        inflow: inflow,
+                        outflow: outflow,
+                        filtered: filtered,
+                      ),
+                  ],
                 ),
               ),
-          ],
-        ),
+              if (!_ctrl.loading)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _ActivityPaymentsBody(
+                    filtered: filtered,
+                    onTxnTap: _openDetailSheet,
+                  ),
+                ),
+            ],
+          ),
         ),
         Positioned(
           left: 0,
@@ -1860,153 +1860,151 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                     }
                   },
                   child: Material(
-                  color: context.dashPanel,
-                  elevation: context.isDark ? 0 : 6,
-                  shadowColor: Colors.black26,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: FilterSortBar(
-                                fields: _filterFields,
-                                rules: _filterRules,
-                                sorts: _sortRules,
-                                selectOptions: _selectOptions,
-                                defaultFilterField: 'category',
-                                defaultSortField: 'date',
-                                search: _search,
-                                onSearchChanged: (v) =>
-                                    setState(() => _search = v),
-                                searchHint: 'Search activity…',
-                                onRulesChanged: (rules) =>
-                                    setState(() => _filterRules = rules),
-                                onSortsChanged: (sorts) =>
-                                    setState(() => _sortRules = sorts),
-                                iconButtons: true,
-                                expandSearch: true,
+                    color: context.dashPanel,
+                    elevation: context.isDark ? 0 : 6,
+                    shadowColor: Colors.black26,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: FilterSortBar(
+                                  fields: _filterFields,
+                                  rules: _filterRules,
+                                  sorts: _sortRules,
+                                  selectOptions: _selectOptions,
+                                  defaultFilterField: 'category',
+                                  defaultSortField: 'date',
+                                  search: _search,
+                                  onSearchChanged: (v) =>
+                                      setState(() => _search = v),
+                                  searchHint: 'Search activity…',
+                                  onRulesChanged: (rules) =>
+                                      setState(() => _filterRules = rules),
+                                  onSortsChanged: (sorts) =>
+                                      setState(() => _sortRules = sorts),
+                                  iconButtons: true,
+                                  expandSearch: true,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 4),
-                            IconButton(
-                              onPressed: () => setState(
-                                () => _stickyStatsOpen = !_stickyStatsOpen,
+                              const SizedBox(width: 4),
+                              IconButton(
+                                onPressed: () => setState(
+                                  () => _stickyStatsOpen = !_stickyStatsOpen,
+                                ),
+                                tooltip: _stickyStatsOpen
+                                    ? 'Hide stats'
+                                    : 'Show stats',
+                                icon: Icon(
+                                  Icons.speed_outlined,
+                                  size: 18,
+                                  color: _stickyStatsOpen
+                                      ? AppColors.brandDark
+                                      : context.dashMute,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                  minWidth: 34,
+                                  minHeight: 34,
+                                ),
                               ),
-                              tooltip: _stickyStatsOpen
-                                  ? 'Hide stats'
-                                  : 'Show stats',
-                              icon: Icon(
-                                Icons.speed_outlined,
-                                size: 18,
-                                color: _stickyStatsOpen
-                                    ? AppColors.brandDark
-                                    : context.dashMute,
+                              IconButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _stickyPinned = false;
+                                    _stickyStatsOpen = false;
+                                    _stickyInteract = false;
+                                  });
+                                  if (_scroll.hasClients) {
+                                    _scroll.animateTo(
+                                      0,
+                                      duration: const Duration(
+                                        milliseconds: 420,
+                                      ),
+                                      curve: Curves.easeOutCubic,
+                                    );
+                                  }
+                                },
+                                icon: const Icon(Icons.close, size: 18),
+                                color: context.dashMute,
+                                tooltip: 'Close folded view',
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                  minWidth: 34,
+                                  minHeight: 34,
+                                ),
                               ),
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 34,
-                                minHeight: 34,
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: () {
-                                setState(() {
-                                  _stickyPinned = false;
-                                  _stickyStatsOpen = false;
-                                  _stickyInteract = false;
-                                });
-                                if (_scroll.hasClients) {
-                                  _scroll.animateTo(
-                                    0,
-                                    duration:
-                                        const Duration(milliseconds: 420),
-                                    curve: Curves.easeOutCubic,
-                                  );
-                                }
-                              },
-                              icon: const Icon(Icons.close, size: 18),
-                              color: context.dashMute,
-                              tooltip: 'Close folded view',
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 34,
-                                minHeight: 34,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 280),
-                        curve: const Cubic(0.22, 1, 0.36, 1),
-                        alignment: Alignment.topCenter,
-                        child: _stickyStatsOpen
-                            ? Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Divider(
-                                    height: 1,
-                                    color: context.dashLine,
-                                  ),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _StickyKpiChip(
-                                          label: 'Inflow',
-                                          value: money(inflow),
-                                          color: const Color(0xFF0D9488),
-                                          onTap: () => _openCashflowDetail(
-                                            filtered,
-                                            _CashMetric.inflow,
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 280),
+                          curve: const Cubic(0.22, 1, 0.36, 1),
+                          alignment: Alignment.topCenter,
+                          child: _stickyStatsOpen
+                              ? Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Divider(height: 1, color: context.dashLine),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _StickyKpiChip(
+                                            label: 'Inflow',
+                                            value: money(inflow),
+                                            color: const Color(0xFF0D9488),
+                                            onTap: () => _openCashflowDetail(
+                                              filtered,
+                                              _CashMetric.inflow,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      Container(
-                                        width: 1,
-                                        height: 44,
-                                        color: context.dashLine,
-                                      ),
-                                      Expanded(
-                                        child: _StickyKpiChip(
-                                          label: 'Outflow',
-                                          value: money(outflow),
-                                          color: const Color(0xFFE11D48),
-                                          onTap: () => _openCashflowDetail(
-                                            filtered,
-                                            _CashMetric.outflow,
+                                        Container(
+                                          width: 1,
+                                          height: 44,
+                                          color: context.dashLine,
+                                        ),
+                                        Expanded(
+                                          child: _StickyKpiChip(
+                                            label: 'Outflow',
+                                            value: money(outflow),
+                                            color: const Color(0xFFE11D48),
+                                            onTap: () => _openCashflowDetail(
+                                              filtered,
+                                              _CashMetric.outflow,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      Container(
-                                        width: 1,
-                                        height: 44,
-                                        color: context.dashLine,
-                                      ),
-                                      Expanded(
-                                        child: _StickyKpiChip(
-                                          label: 'Net',
-                                          value: money(net, signed: true),
-                                          color: const Color(0xFF635BFF),
-                                          onTap: () => _openCashflowDetail(
-                                            filtered,
-                                            _CashMetric.net,
+                                        Container(
+                                          width: 1,
+                                          height: 44,
+                                          color: context.dashLine,
+                                        ),
+                                        Expanded(
+                                          child: _StickyKpiChip(
+                                            label: 'Net',
+                                            value: money(net, signed: true),
+                                            color: const Color(0xFF635BFF),
+                                            onTap: () => _openCashflowDetail(
+                                              filtered,
+                                              _CashMetric.net,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ],
+                                      ],
+                                    ),
+                                  ],
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
                 ),
               ),
             ),
@@ -2031,6 +2029,7 @@ class _ActivityPageChrome extends StatelessWidget {
     required this.onExport,
     required this.onReconcile,
     required this.onAdd,
+    required this.onRecurring,
     required this.inflow,
     required this.outflow,
     required this.filtered,
@@ -2048,6 +2047,7 @@ class _ActivityPageChrome extends StatelessWidget {
   final VoidCallback onExport;
   final VoidCallback onReconcile;
   final VoidCallback onAdd;
+  final VoidCallback onRecurring;
   final double inflow;
   final double outflow;
   final List<DemoTxn> filtered;
@@ -2085,6 +2085,12 @@ class _ActivityPageChrome extends StatelessWidget {
       secondaryTooltip: 'Export CSV',
       extraActions: [
         IconButton(
+          onPressed: onRecurring,
+          tooltip: 'Recurring transactions',
+          icon: const Icon(Icons.autorenew_rounded, size: 22),
+          color: context.dashInk,
+        ),
+        IconButton(
           onPressed: onReconcile,
           tooltip: 'Reconcile',
           icon: const Icon(Icons.fact_check_outlined, size: 22),
@@ -2101,10 +2107,7 @@ class _ActivityPageChrome extends StatelessWidget {
 }
 
 class _ActivityPaymentsBody extends StatelessWidget {
-  const _ActivityPaymentsBody({
-    required this.filtered,
-    required this.onTxnTap,
-  });
+  const _ActivityPaymentsBody({required this.filtered, required this.onTxnTap});
 
   final List<DemoTxn> filtered;
   final ValueChanged<DemoTxn> onTxnTap;
@@ -2161,9 +2164,7 @@ class _ActivityPaymentsBody extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: context.dashLine),
-                    ),
+                    border: Border(bottom: BorderSide(color: context.dashLine)),
                   ),
                   child: Row(
                     children: [
@@ -2249,35 +2250,31 @@ class _StickyKpiChip extends StatelessWidget {
   }
 }
 
-
 enum _CashTimeframe { m6, y1, y2, all }
 
 extension on _CashTimeframe {
   String get label => switch (this) {
-        _CashTimeframe.m6 => 'Last 6 months',
-        _CashTimeframe.y1 => 'Last 1 year',
-        _CashTimeframe.y2 => 'Last 2 years',
-        _CashTimeframe.all => 'All years',
-      };
+    _CashTimeframe.m6 => 'Last 6 months',
+    _CashTimeframe.y1 => 'Last 1 year',
+    _CashTimeframe.y2 => 'Last 2 years',
+    _CashTimeframe.all => 'All years',
+  };
 
   int monthsFor(List<DemoTxn> txns) => switch (this) {
-        _CashTimeframe.m6 => 6,
-        _CashTimeframe.y1 => 12,
-        _CashTimeframe.y2 => 24,
-        // All years: if history fits in 2 years, match the 2y window exactly.
-        _CashTimeframe.all =>
-          _cashflowAllMonthSpan(txns) > 24 ? _cashflowAllMonthSpan(txns) : 24,
-      };
+    _CashTimeframe.m6 => 6,
+    _CashTimeframe.y1 => 12,
+    _CashTimeframe.y2 => 24,
+    // All years: if history fits in 2 years, match the 2y window exactly.
+    _CashTimeframe.all =>
+      _cashflowAllMonthSpan(txns) > 24 ? _cashflowAllMonthSpan(txns) : 24,
+  };
 }
 
 _CashTimeframe _defaultCashTimeframe(List<DemoTxn> txns) =>
     _hasTxnsOlderThanTwoYears(txns) ? _CashTimeframe.all : _CashTimeframe.y2;
 
 class _CashflowDetailPage extends StatefulWidget {
-  const _CashflowDetailPage({
-    required this.txns,
-    required this.initialMetric,
-  });
+  const _CashflowDetailPage({required this.txns, required this.initialMetric});
 
   final List<DemoTxn> txns;
   final _CashMetric initialMetric;
@@ -2296,9 +2293,9 @@ class _CashflowDetailPageState extends State<_CashflowDetailPage> {
   late int _pinned;
 
   List<_CashBucket> get _buckets => _buildCashflowBuckets(
-        widget.txns,
-        months: _timeframe.monthsFor(widget.txns),
-      );
+    widget.txns,
+    months: _timeframe.monthsFor(widget.txns),
+  );
 
   @override
   void initState() {
@@ -2366,242 +2363,231 @@ class _CashflowDetailPageState extends State<_CashflowDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-              child: Row(
-                children: [
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<_CashChartType>(
-                      value: _chartType,
-                      isDense: true,
-                      style: TextStyle(
-                        color: context.dashInk,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      icon: Icon(
-                        Icons.expand_more,
-                        size: 18,
-                        color: context.dashSoftMute,
-                      ),
-                      items: [
-                        for (final t in _chartTypesFor(_metric))
-                          DropdownMenuItem(
-                            value: t,
-                            child: Text(_chartTypeLabel(t)),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                  child: Row(
+                    children: [
+                      DropdownButtonHideUnderline(
+                        child: DropdownButton<_CashChartType>(
+                          value: _chartType,
+                          isDense: true,
+                          style: TextStyle(
+                            color: context.dashInk,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
                           ),
-                      ],
-                      onChanged: (v) {
-                        if (v == null) return;
-                        setState(() => _chartType = v);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 1,
-                    height: 16,
-                    color: context.dashLine,
-                  ),
-                  const SizedBox(width: 8),
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<_CashTimeframe>(
-                      value: _timeframe,
-                      isDense: true,
-                      style: TextStyle(
-                        color: context.dashInk,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      icon: Icon(
-                        Icons.expand_more,
-                        size: 18,
-                        color: context.dashSoftMute,
-                      ),
-                      items: [
-                        for (final t in _CashTimeframe.values)
-                          DropdownMenuItem(
-                            value: t,
-                            child: Text(t.label),
+                          icon: Icon(
+                            Icons.expand_more,
+                            size: 18,
+                            color: context.dashSoftMute,
                           ),
-                      ],
-                      onChanged: (v) {
-                        if (v == null) return;
-                        setState(() {
-                          _timeframe = v;
-                          _pinned = _currentMonthBucketIndex(
-                            _buildCashflowBuckets(
-                              widget.txns,
-                              months: v.monthsFor(widget.txns),
+                          items: [
+                            for (final t in _chartTypesFor(_metric))
+                              DropdownMenuItem(
+                                value: t,
+                                child: Text(_chartTypeLabel(t)),
+                              ),
+                          ],
+                          onChanged: (v) {
+                            if (v == null) return;
+                            setState(() => _chartType = v);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(width: 1, height: 16, color: context.dashLine),
+                      const SizedBox(width: 8),
+                      DropdownButtonHideUnderline(
+                        child: DropdownButton<_CashTimeframe>(
+                          value: _timeframe,
+                          isDense: true,
+                          style: TextStyle(
+                            color: context.dashInk,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          icon: Icon(
+                            Icons.expand_more,
+                            size: 18,
+                            color: context.dashSoftMute,
+                          ),
+                          items: [
+                            for (final t in _CashTimeframe.values)
+                              DropdownMenuItem(value: t, child: Text(t.label)),
+                          ],
+                          onChanged: (v) {
+                            if (v == null) return;
+                            setState(() {
+                              _timeframe = v;
+                              _pinned = _currentMonthBucketIndex(
+                                _buildCashflowBuckets(
+                                  widget.txns,
+                                  months: v.monthsFor(widget.txns),
+                                ),
+                              );
+                              _active = null;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(width: 1, height: 16, color: context.dashLine),
+                      const SizedBox(width: 8),
+                      DropdownButtonHideUnderline(
+                        child: DropdownButton<_CashMetric>(
+                          value: _metric,
+                          isDense: true,
+                          style: TextStyle(
+                            color: context.dashInk,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          icon: Icon(
+                            Icons.expand_more,
+                            size: 18,
+                            color: context.dashSoftMute,
+                          ),
+                          items: [
+                            for (final m in _CashMetric.values)
+                              DropdownMenuItem(
+                                value: m,
+                                child: Text(switch (m) {
+                                  _CashMetric.inflow => 'Inflow',
+                                  _CashMetric.outflow => 'Outflow',
+                                  _CashMetric.net => 'Net',
+                                }),
+                              ),
+                          ],
+                          onChanged: (v) {
+                            if (v == null) return;
+                            setState(() {
+                              _metric = v;
+                              final allowed = _chartTypesFor(v);
+                              if (!allowed.contains(_chartType)) {
+                                _chartType = v == _CashMetric.net
+                                    ? _CashChartType.combined
+                                    : _CashChartType.bars;
+                              }
+                              _active = null;
+                            });
+                          },
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: Icon(Icons.close, color: context.dashMute),
+                        tooltip: 'Close',
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                  child: Column(
+                    children: [
+                      Text(
+                        b?.label ?? '',
+                        style: TextStyle(
+                          color: context.dashSoftMute,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (combined && b != null)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _CashStat(
+                              label: 'Income',
+                              value: money(b.inflow),
+                              color: const Color(0xFF0D9488),
                             ),
-                          );
-                          _active = null;
-                        });
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 1,
-                    height: 16,
-                    color: context.dashLine,
-                  ),
-                  const SizedBox(width: 8),
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<_CashMetric>(
-                      value: _metric,
-                      isDense: true,
-                      style: TextStyle(
-                        color: context.dashInk,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      icon: Icon(
-                        Icons.expand_more,
-                        size: 18,
-                        color: context.dashSoftMute,
-                      ),
-                      items: [
-                        for (final m in _CashMetric.values)
-                          DropdownMenuItem(
-                            value: m,
-                            child: Text(switch (m) {
-                              _CashMetric.inflow => 'Inflow',
-                              _CashMetric.outflow => 'Outflow',
-                              _CashMetric.net => 'Net',
-                            }),
-                          ),
-                      ],
-                      onChanged: (v) {
-                        if (v == null) return;
-                        setState(() {
-                          _metric = v;
-                          final allowed = _chartTypesFor(v);
-                          if (!allowed.contains(_chartType)) {
-                            _chartType = v == _CashMetric.net
-                                ? _CashChartType.combined
-                                : _CashChartType.bars;
-                          }
-                          _active = null;
-                        });
-                      },
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: Icon(Icons.close, color: context.dashMute),
-                    tooltip: 'Close',
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-              child: Column(
-                children: [
-                  Text(
-                    b?.label ?? '',
-                    style: TextStyle(
-                      color: context.dashSoftMute,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (combined && b != null)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _CashStat(
-                          label: 'Income',
-                          value: money(b.inflow),
-                          color: const Color(0xFF0D9488),
-                        ),
-                        const SizedBox(width: 28),
-                        _CashStat(
-                          label: 'Expenses',
-                          value: money(b.outflow),
-                          color: const Color(0xFFE11D48),
-                        ),
-                        const SizedBox(width: 28),
-                        _CashStat(
-                          label: 'Net',
-                          value: money(b.net, signed: true),
-                          color: context.dashInk,
-                        ),
-                      ],
-                    )
-                  else
-                    Text(
-                      money(
-                        _metric == _CashMetric.inflow
-                            ? (b?.inflow ?? 0)
-                            : _metric == _CashMetric.outflow
+                            const SizedBox(width: 28),
+                            _CashStat(
+                              label: 'Expenses',
+                              value: money(b.outflow),
+                              color: const Color(0xFFE11D48),
+                            ),
+                            const SizedBox(width: 28),
+                            _CashStat(
+                              label: 'Net',
+                              value: money(b.net, signed: true),
+                              color: context.dashInk,
+                            ),
+                          ],
+                        )
+                      else
+                        Text(
+                          money(
+                            _metric == _CashMetric.inflow
+                                ? (b?.inflow ?? 0)
+                                : _metric == _CashMetric.outflow
                                 ? (b?.outflow ?? 0)
                                 : (b?.net ?? 0),
-                        signed: _metric == _CashMetric.net,
+                            signed: _metric == _CashMetric.net,
+                          ),
+                          style: TextStyle(
+                            color: context.dashInk,
+                            fontSize: 32,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.6,
+                          ),
+                        ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Period total ${money(periodTotal, signed: _metric == _CashMetric.net)}',
+                        style: const TextStyle(
+                          color: Color(0xFFA3ACB9),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                      style: TextStyle(
-                        color: context.dashInk,
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.6,
-                      ),
-                    ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Period total ${money(periodTotal, signed: _metric == _CashMetric.net)}',
-                    style: const TextStyle(
-                      color: Color(0xFFA3ACB9),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return GestureDetector(
+                          onTapDown: (d) => _select(
+                            d.localPosition.dx,
+                            constraints.maxWidth,
+                            buckets,
+                            pin: true,
+                          ),
+                          onHorizontalDragUpdate: (d) => _select(
+                            d.localPosition.dx,
+                            constraints.maxWidth,
+                            buckets,
+                            pin: false,
+                          ),
+                          onHorizontalDragEnd: (_) =>
+                              setState(() => _active = null),
+                          child: CustomPaint(
+                            size: Size(
+                              constraints.maxWidth,
+                              constraints.maxHeight,
+                            ),
+                            painter: _CashBarsPainter(
+                              buckets: buckets,
+                              metric: _metric,
+                              chartType: chartType,
+                              focus: focus,
+                              lineColor: context.dashLine,
+                              labelColor: context.dashSoftMute,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    return GestureDetector(
-                      onTapDown: (d) => _select(
-                        d.localPosition.dx,
-                        constraints.maxWidth,
-                        buckets,
-                        pin: true,
-                      ),
-                      onHorizontalDragUpdate: (d) => _select(
-                        d.localPosition.dx,
-                        constraints.maxWidth,
-                        buckets,
-                        pin: false,
-                      ),
-                      onHorizontalDragEnd: (_) =>
-                          setState(() => _active = null),
-                      child: CustomPaint(
-                        size: Size(
-                          constraints.maxWidth,
-                          constraints.maxHeight,
-                        ),
-                        painter: _CashBarsPainter(
-                          buckets: buckets,
-                          metric: _metric,
-                          chartType: chartType,
-                          focus: focus,
-                          lineColor: context.dashLine,
-                          labelColor: context.dashSoftMute,
-                        ),
-                      ),
-                    );
-                  },
                 ),
-              ),
-            ),
-          ],
+              ],
             ),
           ),
         ],
@@ -2666,4 +2652,3 @@ class _CashStat extends StatelessWidget {
     );
   }
 }
-

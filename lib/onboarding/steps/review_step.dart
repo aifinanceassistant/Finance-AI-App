@@ -8,24 +8,7 @@ import '../onboarding_dialogs.dart';
 import '../onboarding_layout.dart';
 import '../onboarding_shell.dart';
 
-enum _ReviewId { accounts, income, fixed, labels, plan }
-
-enum _RecurringKind { income, housing, bill }
-
-class _Recurring {
-  _Recurring({
-    required this.kind,
-    required this.name,
-    required this.amount,
-    required this.nextDate,
-  });
-
-  final _RecurringKind kind;
-  final String name;
-  final double amount;
-  final DateTime nextDate;
-  bool saved = false;
-}
+enum _ReviewId { accounts, labels, plan }
 
 class _Label {
   _Label({
@@ -81,7 +64,6 @@ class ReviewStep extends StatefulWidget {
 class _ReviewStepState extends State<ReviewStep> {
   _ReviewId _focus = _ReviewId.accounts;
   bool _budgetingOn = true;
-  final List<_Recurring> _recurrings = [];
   final List<_Label> _labels = [];
   String? _labelsError;
   bool _saving = false;
@@ -122,34 +104,6 @@ class _ReviewStepState extends State<ReviewStep> {
     });
   }
 
-  Iterable<_Recurring> _of(_RecurringKind kind) =>
-      _recurrings.where((r) => r.kind == kind);
-
-  double _sum(Iterable<_Recurring> list) =>
-      list.fold(0, (s, r) => s + r.amount);
-
-  bool get _canAddRecurring => widget.accounts.isNotEmpty;
-
-  String? get _payAccountId {
-    for (final a in widget.accounts) {
-      if (a.kind == AccountKind.depository) return a.id;
-    }
-    return widget.accounts.isEmpty ? null : widget.accounts.first.id;
-  }
-
-  Future<void> _addRecurring(_RecurringKind kind, {String name = ''}) async {
-    final result = await showOnboardingSheet<_Recurring>(
-      context,
-      title: switch (kind) {
-        _RecurringKind.income => 'Add income',
-        _RecurringKind.housing => 'Add housing cost',
-        _RecurringKind.bill => 'Add a bill',
-      },
-      builder: (_) => _RecurringForm(kind: kind, initialName: name),
-    );
-    if (result != null) setState(() => _recurrings.add(result));
-  }
-
   Future<void> _addLabel() async {
     final result = await showOnboardingSheet<_Label>(
       context,
@@ -179,29 +133,6 @@ class _ReviewStepState extends State<ReviewStep> {
     }
     final auth = AuthScope.read(context);
     final errors = <String>[];
-
-    for (final r in _recurrings) {
-      if (r.saved) continue;
-      final err = await createMonthlyRecurring(
-        auth,
-        spaceId,
-        name: r.name,
-        amount: r.amount,
-        income: r.kind == _RecurringKind.income,
-        category: switch (r.kind) {
-          _RecurringKind.income => 'Salary',
-          _RecurringKind.housing => 'Housing',
-          _RecurringKind.bill => 'Bills',
-        },
-        nextDate: r.nextDate,
-        accountId: _payAccountId,
-      );
-      if (err == null) {
-        r.saved = true;
-      } else {
-        errors.add('${r.name}: $err');
-      }
-    }
 
     for (final l in _labels) {
       final wanted = _budgetingOn && l.budget > 0 ? l.budget : null;
@@ -283,23 +214,6 @@ class _ReviewStepState extends State<ReviewStep> {
     child: Text(label),
   );
 
-  static const _needsAccount = Padding(
-    padding: EdgeInsets.only(top: 6),
-    child: Text(
-      'Connect an account first — recurring items are tracked against one.',
-      style: TextStyle(color: Color(0xFFA8671F), fontSize: 13),
-    ),
-  );
-
-  List<Widget> _recurringRows(Iterable<_Recurring> list) => [
-    for (final r in list)
-      _row(
-        r.name,
-        '${money(r.amount)}/mo',
-        onRemove: r.saved ? null : () => setState(() => _recurrings.remove(r)),
-      ),
-  ];
-
   List<Widget> _detailFor(_ReviewId id) {
     switch (id) {
       case _ReviewId.accounts:
@@ -314,51 +228,6 @@ class _ReviewStepState extends State<ReviewStep> {
         return [
           for (final a in widget.accounts)
             _row('${a.institution} · ${a.name}', money(a.balance)),
-        ];
-      case _ReviewId.income:
-        return [
-          ..._recurringRows(_of(_RecurringKind.income)),
-          if (!_canAddRecurring) _needsAccount,
-          _action(
-            '+ Add income',
-            _canAddRecurring
-                ? () => _addRecurring(_RecurringKind.income, name: 'Paycheck')
-                : null,
-          ),
-        ];
-      case _ReviewId.fixed:
-        return [
-          ..._recurringRows([
-            ..._of(_RecurringKind.housing),
-            ..._of(_RecurringKind.bill),
-          ]),
-          if (!_canAddRecurring) _needsAccount,
-          Wrap(
-            spacing: 12,
-            children: [
-              _action(
-                '+ Rent',
-                _canAddRecurring
-                    ? () => _addRecurring(_RecurringKind.housing, name: 'Rent')
-                    : null,
-              ),
-              _action(
-                '+ Mortgage',
-                _canAddRecurring
-                    ? () => _addRecurring(
-                        _RecurringKind.housing,
-                        name: 'Mortgage',
-                      )
-                    : null,
-              ),
-              _action(
-                '+ Bill',
-                _canAddRecurring
-                    ? () => _addRecurring(_RecurringKind.bill)
-                    : null,
-              ),
-            ],
-          ),
         ];
       case _ReviewId.labels:
         final names = _labels.map((l) => l.name.toLowerCase()).toSet();
@@ -410,10 +279,6 @@ class _ReviewStepState extends State<ReviewStep> {
             ),
           ];
         }
-        final income = _sum(_of(_RecurringKind.income));
-        final fixed = _sum(
-          _recurrings.where((r) => r.kind != _RecurringKind.income),
-        );
         return [
           for (final l in _labels)
             InkWell(
@@ -421,14 +286,6 @@ class _ReviewStepState extends State<ReviewStep> {
               child: _row(
                 l.name,
                 l.budget > 0 ? '${money(l.budget)}/mo' : 'Set limit',
-              ),
-            ),
-          if (income > 0 || fixed > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                'After fixed costs, about ${money((income - fixed).clamp(0, double.infinity))} is left to plan against.',
-                style: const TextStyle(color: AppColors.mute),
               ),
             ),
           _action(
@@ -441,9 +298,6 @@ class _ReviewStepState extends State<ReviewStep> {
 
   @override
   Widget build(BuildContext context) {
-    final incomeTotal = _sum(_of(_RecurringKind.income));
-    final fixedList = _recurrings.where((r) => r.kind != _RecurringKind.income);
-    final fixedTotal = _sum(fixedList);
     final budgetTotal = _budgetingOn
         ? _labels.fold<double>(0, (s, l) => s + l.budget)
         : 0.0;
@@ -457,20 +311,6 @@ class _ReviewStepState extends State<ReviewStep> {
         hint: widget.accounts.length == 1
             ? 'account linked'
             : 'accounts linked',
-      ),
-      (
-        id: _ReviewId.income,
-        nav: 'Pay & income',
-        question: 'What do you bring in?',
-        metric: money(incomeTotal),
-        hint: 'expected each month',
-      ),
-      (
-        id: _ReviewId.fixed,
-        nav: 'Fixed costs',
-        question: 'What leaves every month?',
-        metric: money(fixedTotal),
-        hint: 'committed each month',
       ),
       (
         id: _ReviewId.labels,
@@ -618,111 +458,6 @@ class _ReviewStepState extends State<ReviewStep> {
             : 'Open dashboard',
         onPrimary: _saving ? () {} : () => _openDashboard(),
       ),
-    );
-  }
-}
-
-class _RecurringForm extends StatefulWidget {
-  const _RecurringForm({required this.kind, required this.initialName});
-
-  final _RecurringKind kind;
-  final String initialName;
-
-  @override
-  State<_RecurringForm> createState() => _RecurringFormState();
-}
-
-class _RecurringFormState extends State<_RecurringForm> {
-  late final _name = TextEditingController(text: widget.initialName);
-  final _amount = TextEditingController();
-  late DateTime _next;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    final now = DateTime.now();
-    _next = widget.kind == _RecurringKind.income
-        ? now.add(const Duration(days: 14))
-        : DateTime(now.year, now.month + 1, 1);
-  }
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _amount.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _next,
-      firstDate: DateTime(now.year - 1),
-      lastDate: DateTime(now.year + 2),
-    );
-    if (picked != null) setState(() => _next = picked);
-  }
-
-  void _submit() {
-    final name = _name.text.trim();
-    final amount =
-        double.tryParse(_amount.text.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
-    if (name.isEmpty || amount <= 0) {
-      setState(() => _error = 'Enter a name and a monthly amount');
-      return;
-    }
-    Navigator.of(context).pop(
-      _Recurring(
-        kind: widget.kind,
-        name: name,
-        amount: amount,
-        nextDate: _next,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = MaterialLocalizations.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          controller: _name,
-          textCapitalization: TextCapitalization.words,
-          decoration: onboardingInputDecoration('Name'),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _amount,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: onboardingInputDecoration(
-            'Monthly amount',
-            prefix: '\$ ',
-          ),
-        ),
-        const SizedBox(height: 10),
-        OutlinedButton.icon(
-          onPressed: _pickDate,
-          icon: const Icon(Icons.event_rounded, size: 18),
-          label: Text(
-            '${widget.kind == _RecurringKind.income ? 'Next payday' : 'Next due'}: ${l.formatMediumDate(_next)}',
-          ),
-        ),
-        if (_error != null) ...[
-          const SizedBox(height: 8),
-          Text(_error!, style: const TextStyle(color: Color(0xFFC44B4B))),
-        ],
-        const SizedBox(height: 14),
-        FilledButton(
-          onPressed: _submit,
-          style: FilledButton.styleFrom(backgroundColor: AppColors.brand),
-          child: const Text('Add'),
-        ),
-      ],
     );
   }
 }

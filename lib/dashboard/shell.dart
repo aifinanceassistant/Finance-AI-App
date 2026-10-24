@@ -20,8 +20,6 @@ import 'goals_scope.dart';
 import 'investments_controller.dart';
 import 'investments_scope.dart';
 import 'notifications_center.dart';
-import 'recurring_controller.dart';
-import 'recurring_scope.dart';
 import 'screens/accounts_screen.dart';
 import 'screens/bills_screen.dart';
 import 'screens/categories_screen.dart';
@@ -32,7 +30,6 @@ import 'screens/home_screen.dart';
 import 'screens/investments_screen.dart';
 import 'screens/invoices_screen.dart';
 import 'screens/more_screen.dart';
-import 'screens/recurring_screen.dart';
 import 'screens/reports_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/transactions_screen.dart';
@@ -72,7 +69,6 @@ class _DashboardShellState extends State<DashboardShell>
   AccountsController? _accounts;
   TransactionsController? _transactions;
   CategoriesController? _categories;
-  RecurringController? _recurring;
   InvestmentsController? _investments;
   GoalsController? _goals;
   ContactsController? _contacts;
@@ -80,7 +76,6 @@ class _DashboardShellState extends State<DashboardShell>
   var _ownedAccounts = false;
   var _ownedTransactions = false;
   var _ownedCategories = false;
-  var _ownedRecurring = false;
   var _ownedInvestments = false;
   var _ownedGoals = false;
   var _ownedContacts = false;
@@ -152,7 +147,6 @@ class _DashboardShellState extends State<DashboardShell>
     _accounts = AccountsController(auth);
     _transactions = TransactionsController(auth);
     _categories = CategoriesController(auth);
-    _recurring = RecurringController(auth);
     _investments = InvestmentsController(auth);
     _goals = GoalsController(auth);
     _contacts = ContactsController(auth);
@@ -160,7 +154,6 @@ class _DashboardShellState extends State<DashboardShell>
     _ownedAccounts = true;
     _ownedTransactions = true;
     _ownedCategories = true;
-    _ownedRecurring = true;
     _ownedInvestments = true;
     _ownedGoals = true;
     _ownedContacts = true;
@@ -174,7 +167,6 @@ class _DashboardShellState extends State<DashboardShell>
     final accounts = _accounts;
     final transactions = _transactions;
     final categories = _categories;
-    final recurring = _recurring;
     final investments = _investments;
     final goals = _goals;
     final contacts = _contacts;
@@ -182,7 +174,6 @@ class _DashboardShellState extends State<DashboardShell>
         accounts == null ||
         transactions == null ||
         categories == null ||
-        recurring == null ||
         investments == null ||
         goals == null ||
         contacts == null ||
@@ -198,8 +189,6 @@ class _DashboardShellState extends State<DashboardShell>
     transactions.loadForSpace(id);
     // ignore: discarded_futures
     categories.loadForSpace(id);
-    // ignore: discarded_futures
-    recurring.loadForSpace(id);
     // ignore: discarded_futures
     investments.loadForSpace(id);
     // ignore: discarded_futures
@@ -217,7 +206,6 @@ class _DashboardShellState extends State<DashboardShell>
     if (_ownedAccounts) _accounts?.dispose();
     if (_ownedTransactions) _transactions?.dispose();
     if (_ownedCategories) _categories?.dispose();
-    if (_ownedRecurring) _recurring?.dispose();
     if (_ownedInvestments) _investments?.dispose();
     if (_ownedGoals) _goals?.dispose();
     if (_ownedContacts) _contacts?.dispose();
@@ -291,8 +279,6 @@ class _DashboardShellState extends State<DashboardShell>
         _openGoals();
       case CommandPage.investments:
         _openInvestments();
-      case CommandPage.recurring:
-        _openRecurring();
       case CommandPage.documents:
         _openDocuments();
       case CommandPage.contacts:
@@ -322,10 +308,7 @@ class _DashboardShellState extends State<DashboardShell>
     return SpacesScope(controller: spaces, child: child);
   }
 
-  void _openGoals({
-    bool openContribute = false,
-    String? contributeGoalName,
-  }) {
+  void _openGoals({bool openContribute = false, String? contributeGoalName}) {
     final spaces = _spaces ?? SpacesController.fake();
     if (!spaces.hasFeature('goals')) {
       _openSettings(section: 'plan');
@@ -360,10 +343,7 @@ class _DashboardShellState extends State<DashboardShell>
         builder: (_) => _withSpaces(
           TransactionsScope(
             controller: transactions,
-            child: DashStyleScope(
-              style: style,
-              child: const ReportsScreen(),
-            ),
+            child: DashStyleScope(style: style, child: const ReportsScreen()),
           ),
         ),
       ),
@@ -378,10 +358,7 @@ class _DashboardShellState extends State<DashboardShell>
         builder: (_) => _withSpaces(
           TransactionsScope(
             controller: transactions,
-            child: DashStyleScope(
-              style: style,
-              child: const DocumentsScreen(),
-            ),
+            child: DashStyleScope(style: style, child: const DocumentsScreen()),
           ),
         ),
       ),
@@ -422,10 +399,7 @@ class _DashboardShellState extends State<DashboardShell>
             controller: contacts,
             child: DashStyleScope(
               style: style,
-              child: BillsScreen(
-                controller: bills,
-                accounts: accounts,
-              ),
+              child: BillsScreen(controller: bills, accounts: accounts),
             ),
           ),
         ),
@@ -449,32 +423,7 @@ class _DashboardShellState extends State<DashboardShell>
             controller: contacts,
             child: DashStyleScope(
               style: style,
-              child: InvoicesScreen(
-                controller: invoices,
-                accounts: accounts,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _openRecurring() {
-    final style = DashVariantStyle.of(context);
-    final recurring = _recurring ?? RecurringController.fake();
-    final contacts = _contacts ?? ContactsController.fake();
-    Navigator.of(context).push(
-      dashModalRoute<void>(
-        builder: (_) => _withSpaces(
-          ContactsScope(
-            controller: contacts,
-            child: RecurringScope(
-              controller: recurring,
-              child: DashStyleScope(
-                style: style,
-                child: const RecurringScreen(),
-              ),
+              child: InvoicesScreen(controller: invoices, accounts: accounts),
             ),
           ),
         ),
@@ -537,10 +486,7 @@ class _DashboardShellState extends State<DashboardShell>
     Navigator.of(context).push(
       dashModalRoute<void>(
         builder: (_) => _withSpaces(
-          DashStyleScope(
-            style: style,
-            child: const UsersPermissionsScreen(),
-          ),
+          DashStyleScope(style: style, child: const UsersPermissionsScreen()),
         ),
       ),
     );
@@ -596,7 +542,9 @@ class _DashboardShellState extends State<DashboardShell>
             const DashFieldLabel('Starting balance'),
             DashTextField(
               controller: balance,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               errorText: fieldErrors['balance'],
             ),
             const SizedBox(height: 16),
@@ -693,7 +641,6 @@ class _DashboardShellState extends State<DashboardShell>
     final accounts = _accounts ?? AccountsController.fake();
     final transactions = _transactions ?? TransactionsController.fake();
     final categories = _categories ?? CategoriesController.fake();
-    final recurring = _recurring ?? RecurringController.fake();
     final investments = _investments ?? InvestmentsController.fake();
     final goals = _goals ?? GoalsController.fake();
     final contacts = _contacts ?? ContactsController.fake();
@@ -706,36 +653,32 @@ class _DashboardShellState extends State<DashboardShell>
           controller: transactions,
           child: CategoriesScope(
             controller: categories,
-            child: RecurringScope(
-              controller: recurring,
-              child: InvestmentsScope(
-                controller: investments,
-                child: GoalsScope(
-                  controller: goals,
-                  child: ContactsScope(
-                    controller: contacts,
-                    child: ListenableBuilder(
-                      listenable: Listenable.merge([
-                        spaces,
-                        accounts,
-                        transactions,
-                        categories,
-                        recurring,
-                        investments,
-                        goals,
-                        contacts,
-                      ]),
-                      builder: (context, _) {
-                        return DashStyleScope(
+            child: InvestmentsScope(
+              controller: investments,
+              child: GoalsScope(
+                controller: goals,
+                child: ContactsScope(
+                  controller: contacts,
+                  child: ListenableBuilder(
+                    listenable: Listenable.merge([
+                      spaces,
+                      accounts,
+                      transactions,
+                      categories,
+                      investments,
+                      goals,
+                      contacts,
+                    ]),
+                    builder: (context, _) {
+                      return DashStyleScope(
+                        style: style,
+                        child: _shellChrome(
+                          context: context,
                           style: style,
-                          child: _shellChrome(
-                            context: context,
-                            style: style,
-                            spaces: spaces,
-                          ),
-                        );
-                      },
-                    ),
+                          spaces: spaces,
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -751,8 +694,7 @@ class _DashboardShellState extends State<DashboardShell>
       HomeScreen(
         style: style,
         onRefresh: _refreshSpaceData,
-        onViewTransactions: () =>
-            _go(DashTab.transactions, clearFilter: true),
+        onViewTransactions: () => _go(DashTab.transactions, clearFilter: true),
         onViewAccounts: () => _go(DashTab.accounts),
         onViewCategories: () => _go(DashTab.categories),
         onViewGoals: () => _openGoals(
@@ -768,15 +710,12 @@ class _DashboardShellState extends State<DashboardShell>
         onRefresh: _refreshSpaceData,
       ),
       CategoriesScreen(
-        onOpenCategory: (name) => _go(
-          DashTab.transactions,
-          categoryFilter: name,
-        ),
+        onOpenCategory: (name) =>
+            _go(DashTab.transactions, categoryFilter: name),
         onRefresh: _refreshSpaceData,
       ),
       AccountsScreen(onRefresh: _refreshSpaceData),
       MoreScreen(
-        onRecurring: _openRecurring,
         onInvestments: _openInvestments,
         onGoals: _openGoals,
         onReports: _openReports,
@@ -806,7 +745,6 @@ class _DashboardShellState extends State<DashboardShell>
       if (_accounts != null) _accounts!.loadForSpace(id),
       if (_transactions != null) _transactions!.loadForSpace(id),
       if (_categories != null) _categories!.loadForSpace(id),
-      if (_recurring != null) _recurring!.loadForSpace(id),
       if (_investments != null) _investments!.loadForSpace(id),
       if (_goals != null) _goals!.loadForSpace(id),
       if (_contacts != null) _contacts!.loadForSpace(id),
@@ -839,11 +777,7 @@ class _DashboardShellState extends State<DashboardShell>
         IconButton(
           tooltip: 'Search',
           onPressed: () => _openCommandSearch(context),
-          icon: Icon(
-            Icons.search_rounded,
-            color: context.dashInk,
-            size: 22,
-          ),
+          icon: Icon(Icons.search_rounded, color: context.dashInk, size: 22),
         ),
         NotificationBellButton(onOpenItem: _handleNotification),
       ],
@@ -870,10 +804,7 @@ class _DashboardShellState extends State<DashboardShell>
       style: style,
       spaceBar: spaceBar,
       hideBottomNav: _agentMode,
-      onSelect: (tab) => _go(
-        tab,
-        clearFilter: tab == DashTab.transactions,
-      ),
+      onSelect: (tab) => _go(tab, clearFilter: tab == DashTab.transactions),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 380),
         switchInCurve: Curves.easeOutCubic,
