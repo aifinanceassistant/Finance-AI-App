@@ -488,7 +488,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> {
             final ok = await _ctrl.remove(id);
             if (!mounted) return;
             Navigator.pop(context);
-            toast(context, ok ? 'Holding removed' : 'Could not remove');
+            toast(context, ok ? '${holding.name} removed' : 'Couldn’t remove ${holding.name}');
           },
           child: const Text(
             'Delete',

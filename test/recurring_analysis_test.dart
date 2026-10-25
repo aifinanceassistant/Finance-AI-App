@@ -40,7 +40,7 @@ Future<void> open(WidgetTester tester, AnalysisController controller) async {
 }
 
 void main() {
-  testWidgets('empty history explains detection and makes no fake rules', (
+  testWidgets('empty history keeps copy concise and creates no rules', (
     tester,
   ) async {
     await open(
@@ -52,10 +52,7 @@ void main() {
       }),
     );
     expect(find.text('Recurring transactions'), findsOneWidget);
-    expect(
-      find.textContaining('At least three completed transactions'),
-      findsOneWidget,
-    );
+    expect(find.text('No recurring transactions found yet.'), findsOneWidget);
     expect(find.text('Add recurring'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -70,7 +67,7 @@ void main() {
     await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
     expect(controller.calls, 2);
-    expect(find.text('0 completed transactions · 0 patterns'), findsOneWidget);
+    expect(find.text('0 recurring · 0 transactions'), findsOneWidget);
   });
   testWidgets(
     'pattern expands to original currency price changes and payment history',
@@ -111,6 +108,39 @@ void main() {
           ],
         }),
       );
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'Initial dialog fits a phone',
+      );
+      await tester.tap(find.text('Cards'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'Cards must fit a phone');
+      expect(find.text('Next 2026-10-01'), findsOneWidget);
+      await tester.tap(find.text('Timeline'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'Timeline must fit a phone',
+      );
+      expect(find.text('2026-10-01'), findsOneWidget);
+      await tester.tap(find.byTooltip('Full page'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'Full page must fit a phone',
+      );
+      expect(find.byType(AppBar), findsOneWidget);
+      await tester.tap(find.text('Ledger'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'Ledger scrolls without overflow',
+      );
+      expect(find.byType(DataTable), findsOneWidget);
       await tester.tap(find.text('Internet'));
       await tester.pumpAndSettle();
       expect(
@@ -121,7 +151,7 @@ void main() {
         find.textContaining('Estimated next date: 2026-10-01'),
         findsOneWidget,
       );
-      expect(find.text('CAD 55.00'), findsOneWidget);
+      expect(find.text('CAD 55.00'), findsWidgets);
       expect(tester.takeException(), isNull);
     },
   );

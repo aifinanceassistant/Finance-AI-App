@@ -1100,7 +1100,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     final ok = await _ctrl.deleteStatement(s.id);
                     if (!mounted) return;
                     if (!ok) {
-                      toast(context, 'Could not delete statement');
+                      toast(context, 'Couldn’t delete ${s.filename}');
                       return;
                     }
                     if (open) {
@@ -1111,7 +1111,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                         ],
                       );
                     }
-                    toast(context, 'Statement deleted');
+                    toast(context, '${s.filename} deleted');
                   },
                 ),
           ],
@@ -1261,7 +1261,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
       if (confirmed != true || !mounted) return;
       final ok = await _ctrl.remove(key);
       if (!mounted) return;
-      toast(context, ok ? 'Connection removed' : 'Could not remove');
+      toast(context, ok ? '$label removed' : 'Couldn’t remove $label');
     }
   }
 

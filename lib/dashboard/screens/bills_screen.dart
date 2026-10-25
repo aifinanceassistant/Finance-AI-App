@@ -282,7 +282,7 @@ class _BillsScreenState extends State<BillsScreen> {
                   if (!mounted) return;
                   toast(
                     context,
-                    updated == null ? 'Could not update' : 'Bill saved',
+                    updated == null ? 'Couldn’t update ${descCtrl.text.trim()}' : '${updated.description} saved',
                   );
                 } else {
                   final created = await _ctrl.create(
@@ -303,7 +303,7 @@ class _BillsScreenState extends State<BillsScreen> {
                   if (!mounted) return;
                   toast(
                     context,
-                    created == null ? 'Could not create' : 'Bill added',
+                    created == null ? 'Couldn’t add ${descCtrl.text.trim()}' : '${created.description} added',
                   );
                 }
               },
@@ -423,7 +423,7 @@ class _BillsScreenState extends State<BillsScreen> {
                 if (!mounted) return;
                 toast(
                   context,
-                  updated == null ? 'Could not record payment' : 'Payment recorded',
+                  updated == null ? 'Couldn’t record payment for ${bill.description}' : 'Payment recorded for ${bill.description}',
                 );
               },
             ),
@@ -460,7 +460,7 @@ class _BillsScreenState extends State<BillsScreen> {
     if (ok != true || !mounted) return;
     final removed = await _ctrl.remove(bill.id);
     if (!mounted) return;
-    toast(context, removed ? 'Bill deleted' : 'Could not delete');
+    toast(context, removed ? '${bill.description} deleted' : 'Couldn’t delete ${bill.description}');
   }
 
   Future<void> _exportTable() {

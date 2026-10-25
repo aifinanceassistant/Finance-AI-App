@@ -152,7 +152,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
               final removed = await _ctrl.remove(existing.id);
               if (!mounted) return;
               Navigator.pop(context);
-              toast(context, removed ? 'Contact removed' : 'Could not remove');
+              toast(context, removed ? '${existing.name} removed' : 'Couldn’t remove ${existing.name}');
             },
             child: const Text(
               'Remove',
@@ -183,7 +183,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
                 );
                 if (!mounted) return;
                 Navigator.pop(context);
-                toast(context, row != null ? 'Contact added' : 'Could not add');
+                toast(context, row != null ? '${row.name} added' : 'Couldn’t add ${nameCtrl.text.trim()}');
               } else {
                 final row = await _ctrl.update(
                   existing.id,
@@ -197,7 +197,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
                 Navigator.pop(context);
                 toast(
                   context,
-                  row != null ? 'Contact updated' : 'Could not update',
+                  row != null ? '${row.name} updated' : 'Couldn’t update ${existing.name}',
                 );
               }
             },

@@ -288,12 +288,12 @@ class TransactionsController extends ChangeNotifier {
     return row;
   }
 
-  Future<void> markSettled(String id) async {
-    await patch(id, {'status': _dbStatus(TxnStatus.succeeded)});
+  Future<bool> markSettled(String id) async {
+    return await patch(id, {'status': _dbStatus(TxnStatus.succeeded)}) != null;
   }
 
-  Future<void> setApproval(String id, ApprovalStatus status) async {
-    await patch(id, {'approvalStatus': _dbApproval(status)});
+  Future<bool> setApproval(String id, ApprovalStatus status) async {
+    return await patch(id, {'approvalStatus': _dbApproval(status)}) != null;
   }
 
   Future<DemoTxn?> create({
@@ -365,18 +365,25 @@ class TransactionsController extends ChangeNotifier {
     return row;
   }
 
-  Future<void> settleAll() async {
+  Future<({int settled, List<String> failed})> settleAll() async {
     final open = _txns
         .where(
           (t) => t.status == TxnStatus.pending || t.status == TxnStatus.failed,
         )
         .toList();
+    var settled = 0;
+    final failed = <String>[];
     for (final t in open) {
-      await markSettled(t.id);
+      if (await markSettled(t.id)) {
+        settled++;
+      } else {
+        failed.add(t.merchant);
+      }
     }
+    return (settled: settled, failed: failed);
   }
 
-  Future<void> updateDetail({
+  Future<bool> updateDetail({
     required String id,
     required String category,
     required MoneyMove type,
@@ -404,7 +411,7 @@ class TransactionsController extends ChangeNotifier {
         'lineItems': lineItems.map((e) => e.toJson()).toList(),
     };
     if (reconciled) body['status'] = _dbStatus(TxnStatus.succeeded);
-    await patch(id, body);
+    return await patch(id, body) != null;
   }
 
   Future<bool> remove(String id) async {

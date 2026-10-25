@@ -33,6 +33,7 @@ const _filterFields = [
     type: FilterFieldType.text,
   ),
   FilterFieldDef(id: 'type', label: 'Type', type: FilterFieldType.select),
+  FilterFieldDef(id: 'vendor', label: 'Vendor', type: FilterFieldType.select),
   FilterFieldDef(
     id: 'category',
     label: 'Category',
@@ -658,6 +659,16 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 
   List<String> _selectOptions(String field) {
+    if (field == 'vendor') {
+      return _txns
+          .map(
+            (t) =>
+                ContactsScope.maybeOf(context)?.byId(t.contactId)?.name ?? '—',
+          )
+          .toSet()
+          .toList()
+        ..sort();
+    }
     if (field == 'status') return _statusLabels;
     if (field == 'approvalStatus') return _approvalLabels;
     if (field == 'type') return kMoneyMoveLabels;
@@ -675,9 +686,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 
   List<DemoTxn> get _filtered {
-    final searched = applySearch(_txns, _search, _filterFields, _txnValue);
-    final filtered = applyFilters(searched, _filterRules, _txnValue);
-    return applySort(filtered, _sortRules, _txnValue);
+    Object? value(DemoTxn txn, String field) => field == 'vendor'
+        ? ContactsScope.maybeOf(context)?.byId(txn.contactId)?.name ?? '—'
+        : _txnValue(txn, field);
+    final searched = applySearch(_txns, _search, _filterFields, value);
+    final filtered = applyFilters(searched, _filterRules, value);
+    return applySort(filtered, _sortRules, value);
   }
 
   Future<void> _exportTable() async {
@@ -693,6 +707,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           'Status',
           'Approval',
           'Description',
+          'Vendor',
           'Category',
           'Account',
           'Date',
@@ -706,6 +721,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             _statusLabel(t.status),
             _approvalLabel(t.approvalStatus),
             t.merchant,
+            ContactsScope.maybeOf(context)?.byId(t.contactId)?.name ?? '—',
             t.category,
             t.account,
             t.date,
@@ -714,6 +730,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           ],
       ],
     );
+  }
+
+  String _transactionFeedback(DemoTxn txn, String action) {
+    final native = txn.originalAmount != null && txn.originalCurrency != null;
+    final amount = (native ? txn.originalAmount! : txn.amount)
+        .abs()
+        .toStringAsFixed(2);
+    return '${txn.merchant} $action · ${native ? txn.originalCurrency : 'USD'} $amount · ${txn.dateIso ?? txn.date}';
   }
 
   Future<void> _openAddSheet() async {
@@ -1029,8 +1053,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 toast(
                   context,
                   created == null
-                      ? 'Couldn’t add transaction'
-                      : 'Transaction added',
+                      ? 'Couldn’t add ${merchantCtrl.text.trim()}'
+                      : _transactionFeedback(created, 'added'),
                 );
               },
             ),
@@ -1156,7 +1180,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           }
           if (result.doc != null) {
             setSheetState(() => docs = [result.doc!, ...docs]);
-            toast(context, 'Document attached');
+            toast(context, 'Document attached to ${txn.merchant}');
           }
         }
 
@@ -1170,16 +1194,32 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 ApprovalActions(
                   status: txn.approvalStatus,
                   onApprove: () async {
-                    await _ctrl.setApproval(txn.id, ApprovalStatus.approved);
+                    final ok = await _ctrl.setApproval(
+                      txn.id,
+                      ApprovalStatus.approved,
+                    );
                     if (!mounted) return;
-                    Navigator.pop(context);
-                    toast(context, 'Approved · ${txn.merchant}');
+                    if (ok) Navigator.pop(context);
+                    toast(
+                      context,
+                      ok
+                          ? _transactionFeedback(txn, 'approved')
+                          : 'Couldn’t approve ${txn.merchant}. Try again.',
+                    );
                   },
                   onReject: () async {
-                    await _ctrl.setApproval(txn.id, ApprovalStatus.rejected);
+                    final ok = await _ctrl.setApproval(
+                      txn.id,
+                      ApprovalStatus.rejected,
+                    );
                     if (!mounted) return;
-                    Navigator.pop(context);
-                    toast(context, 'Rejected · ${txn.merchant}');
+                    if (ok) Navigator.pop(context);
+                    toast(
+                      context,
+                      ok
+                          ? _transactionFeedback(txn, 'rejected')
+                          : 'Couldn’t reject ${txn.merchant}. Try again.',
+                    );
                   },
                 ),
               ],
@@ -1364,10 +1404,15 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               GhostButton(
                 label: 'Mark settled',
                 onPressed: () async {
-                  await _ctrl.markSettled(txn.id);
+                  final ok = await _ctrl.markSettled(txn.id);
                   if (!mounted) return;
-                  Navigator.pop(context);
-                  toast(context, 'Settled · ${txn.merchant}');
+                  if (ok) Navigator.pop(context);
+                  toast(
+                    context,
+                    ok
+                        ? _transactionFeedback(txn, 'settled')
+                        : 'Couldn’t settle ${txn.merchant}. Try again.',
+                  );
                 },
               ),
             ],
@@ -1509,7 +1554,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           final ok = await _ctrl.deleteDocument(d.id);
                           if (!ctx.mounted) return;
                           if (!ok) {
-                            toast(context, 'Could not remove document');
+                            toast(
+                              context,
+                              'Couldn’t remove ${d.filename} from ${txn.merchant}',
+                            );
                             return;
                           }
                           setSheetState(
@@ -1529,8 +1577,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           onPressed: () async {
             final ok = await _ctrl.remove(txn.id);
             if (!mounted) return;
-            Navigator.pop(context);
-            toast(context, ok ? 'Transaction removed' : 'Could not remove');
+            if (ok) Navigator.pop(context);
+            toast(
+              context,
+              ok
+                  ? _transactionFeedback(txn, 'deleted')
+                  : 'Couldn’t delete ${txn.merchant}. Try again.',
+            );
           },
           child: const Text(
             'Delete',
@@ -1573,7 +1626,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               } else if (txn.lineItems != null) {
                 clearLines = true;
               }
-              await _ctrl.updateDetail(
+              final ok = await _ctrl.updateDetail(
                 id: txn.id,
                 category: category,
                 type: type,
@@ -1587,8 +1640,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 clearLineItems: clearLines,
               );
               if (!mounted) return;
-              Navigator.pop(context);
-              toast(context, 'Transaction updated · ${txn.merchant}');
+              if (ok) Navigator.pop(context);
+              toast(
+                context,
+                ok
+                    ? _transactionFeedback(txn, 'updated')
+                    : 'Couldn’t update ${txn.merchant}. Try again.',
+              );
             },
           ),
         ),
@@ -1667,11 +1725,16 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                     ),
                     TextButton(
                       onPressed: () async {
-                        await _ctrl.markSettled(t.id);
+                        final ok = await _ctrl.markSettled(t.id);
                         if (!ctx.mounted) return;
                         setSheetState(() {});
                         if (!mounted) return;
-                        toast(context, 'Settled · ${t.merchant}');
+                        toast(
+                          context,
+                          ok
+                              ? _transactionFeedback(t, 'settled')
+                              : 'Couldn’t settle ${t.merchant}. Try again.',
+                        );
                       },
                       child: const Text(
                         'Settle',
@@ -1711,12 +1774,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 toast(context, 'Nothing to reconcile');
                 return;
               }
-              await _ctrl.settleAll();
+              final result = await _ctrl.settleAll();
               if (!mounted) return;
-              Navigator.pop(context);
+              if (result.failed.isEmpty) Navigator.pop(context);
               toast(
                 context,
-                'Settled $open transaction${open == 1 ? '' : 's'}',
+                '${result.settled} of $open transactions settled${result.failed.isEmpty ? '' : '. Not saved: ${result.failed.take(3).join(', ')}. Try again.'}',
               );
             },
           ),
@@ -2144,6 +2207,35 @@ class _ActivityPaymentsBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: Text(
+                  'Description',
+                  style: TextStyle(fontSize: 11, color: context.dashMute),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  'Vendor',
+                  style: TextStyle(fontSize: 11, color: context.dashMute),
+                ),
+              ),
+              SizedBox(
+                width: 90,
+                child: Text(
+                  'Amount',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 11, color: context.dashMute),
+                ),
+              ),
+            ],
+          ),
+        ),
         for (final date in order) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(0, 14, 0, 6),
@@ -2169,6 +2261,7 @@ class _ActivityPaymentsBody extends StatelessWidget {
                   child: Row(
                     children: [
                       Expanded(
+                        flex: 3,
                         child: Text(
                           t.merchant,
                           maxLines: 1,
@@ -2180,16 +2273,37 @@ class _ActivityPaymentsBody extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Text(
-                        money(t.amount, signed: true),
-                        style: TextStyle(
-                          color: t.amount > 0
-                              ? AppColors.success
-                              : context.dashInk,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+                      Expanded(
+                        flex: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(
+                            ContactsScope.maybeOf(context)
+                                    ?.byId(t.contactId)
+                                    ?.name ??
+                                '—',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: context.dashMute,
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 90,
+                        child: Text(
+                          money(t.amount, signed: true),
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            color: t.amount > 0
+                                ? AppColors.success
+                                : context.dashInk,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                         ),
                       ),
                     ],

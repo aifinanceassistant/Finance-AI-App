@@ -579,7 +579,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       }
       if (_groupFilter == from) _groupFilter = trimmed;
     });
-    toast(context, 'Group updated');
+    toast(context, 'Group renamed to $trimmed');
     return true;
   }
 
@@ -862,7 +862,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           }
         }
       });
-      toast(context, 'Category created');
+      toast(context, '$name created');
     } else {
       final ok = await ctrl?.rename(existing.id, name) ?? false;
       if (!mounted) return;
@@ -877,7 +877,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           ..color = color
           ..emoji = emoji;
       });
-      toast(context, 'Category updated');
+      toast(context, '$name updated');
     }
   }
 
@@ -992,7 +992,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       _categories.removeWhere((c) => c.id == item.id);
       _rules.removeWhere((r) => r.categoryId == item.id);
     });
-    toast(context, 'Category deleted');
+    toast(context, '${item.name} deleted');
   }
 
   Future<void> _merge(_CategoryItem source) async {
@@ -1278,7 +1278,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                             match = _RuleMatch.merchantContains;
                           }
                         });
-                        toast(context, 'Rule added');
+                        var targetName = 'selected category';
+                        for (final item in _categories) { if (item.id == categoryId) { targetName = item.name; break; } }
+                        toast(context, 'Rule added for $targetName');
                       },
                     ),
                     const SizedBox(height: 12),

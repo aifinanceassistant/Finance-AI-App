@@ -270,7 +270,7 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> {
                   return;
                 }
                 Navigator.pop(ctx);
-                toast(context, 'Permissions updated');
+                toast(context, 'Permissions updated for ${member.email}');
                 // ignore: discarded_futures
                 _load();
               },
@@ -307,7 +307,7 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> {
       toast(context, err);
       return;
     }
-    toast(context, 'Member removed');
+    toast(context, '${member.email} removed');
     await _load();
   }
 

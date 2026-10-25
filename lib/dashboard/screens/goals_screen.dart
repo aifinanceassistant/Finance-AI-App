@@ -453,7 +453,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
             final ok = await _ctrl.remove(id);
             if (!mounted) return;
             Navigator.pop(context);
-            toast(context, ok ? 'Goal removed' : 'Could not remove');
+            toast(context, ok ? '${goal.name} deleted' : 'Couldn’t delete ${goal.name}');
           },
           child: const Text(
             'Delete',

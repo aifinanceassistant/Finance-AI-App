@@ -332,7 +332,7 @@ class _McpKeysScreenState extends State<McpKeysScreen> {
           .map((k) => k.id == key.id ? updated : k)
           .toList();
       setState(() => _keys = List<McpApiKey>.of(_fakeKeys));
-      toast(context, nextActive ? 'Key activated' : 'Key revoked');
+      toast(context, nextActive ? '${key.name} activated' : '${key.name} revoked');
       return;
     }
 
@@ -346,7 +346,7 @@ class _McpKeysScreenState extends State<McpKeysScreen> {
       toast(context, 'Couldn’t update key');
       return;
     }
-    toast(context, nextActive ? 'Key activated' : 'Key revoked');
+    toast(context, nextActive ? '${key.name} activated' : '${key.name} revoked');
     await _load();
   }
 
@@ -377,7 +377,7 @@ class _McpKeysScreenState extends State<McpKeysScreen> {
     if (auth.isFake) {
       _fakeKeys = _fakeKeys.where((k) => k.id != key.id).toList();
       setState(() => _keys = List<McpApiKey>.of(_fakeKeys));
-      toast(context, 'Key deleted');
+      toast(context, '${key.name} deleted');
       return;
     }
 
@@ -387,10 +387,10 @@ class _McpKeysScreenState extends State<McpKeysScreen> {
     );
     if (!mounted) return;
     if (data == null) {
-      toast(context, 'Couldn’t delete key');
+      toast(context, 'Couldn’t delete ${key.name}');
       return;
     }
-    toast(context, 'Key deleted');
+    toast(context, '${key.name} deleted');
     await _load();
   }
 
