@@ -388,6 +388,7 @@ class TransactionsController extends ChangeNotifier {
     required String category,
     required MoneyMove type,
     required bool reconciled,
+    ApprovalStatus? approvalStatus,
     String? notes,
     String? contactId,
     bool clearContactId = false,
@@ -399,6 +400,7 @@ class TransactionsController extends ChangeNotifier {
     final body = <String, dynamic>{
       'category': category,
       'type': _dbType(type),
+      if (approvalStatus != null) 'approvalStatus': _dbApproval(approvalStatus),
       if (notes != null) 'notes': notes,
       if (clearContactId)
         'contactId': null

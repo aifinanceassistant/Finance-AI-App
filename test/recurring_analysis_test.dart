@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:financeai_app/dashboard/recurring_price_chart.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:financeai_app/auth/auth_controller.dart';
 import 'package:financeai_app/dashboard/recurring_analysis_dialog.dart';
@@ -195,6 +197,57 @@ void main() {
         findsNothing,
       );
       expect(controller.calls, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'card price chart responds to touch and keyboard; details have no chart',
+    (tester) async {
+      final response = data();
+      final first =
+          (response['patterns'] as List).first as Map<String, dynamic>;
+      first['history'] = [
+        {'date': '2026-07-01', 'amount': 50, 'change': null},
+        {'date': '2026-08-01', 'amount': 50, 'change': 0},
+        {'date': '2026-09-01', 'amount': 55, 'change': 5},
+      ];
+      await open(
+        tester,
+        AnalysisController(response),
+        size: const Size(1200, 900),
+      );
+      final chart = find.byType(RecurringPriceChart).first;
+      final bounds = tester.getRect(chart);
+      await tester.tapAt(Offset(bounds.left + 5, bounds.top + 20));
+      await tester.pump();
+      expect(find.text('2026-07-01 · CAD 50.00'), findsOneWidget);
+      await tester.dragFrom(
+        Offset(bounds.left + 5, bounds.top + 20),
+        Offset(bounds.width - 10, 0),
+      );
+      await tester.pump();
+      expect(find.text('2026-09-01 · CAD 55.00 · +CAD 5.00'), findsOneWidget);
+      final focus = tester.widget<Focus>(
+        find.descendant(of: chart, matching: find.byType(Focus)).first,
+      );
+      Focus.of(
+        tester.element(
+          find.descendant(of: chart, matching: find.byType(Semantics)).first,
+        ),
+      ).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.home);
+      await tester.pump();
+      expect(find.text('2026-07-01 · CAD 50.00'), findsOneWidget);
+      expect(focus.onKeyEvent, isNotNull);
+      expect(
+        find.descendant(
+          of: find.byKey(detailsPane),
+          matching: find.byType(RecurringPriceChart),
+        ),
+        findsNothing,
+      );
+      expect(find.text('Price history'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

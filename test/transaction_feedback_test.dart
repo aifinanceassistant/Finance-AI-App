@@ -6,8 +6,10 @@ import 'package:financeai_app/dashboard/transactions_controller.dart';
 class FailureController extends TransactionsController {
   FailureController() : super(AuthController.fake());
   final failures = <String>{};
+  Map<String, dynamic>? lastBody;
   @override
   Future<DemoTxn?> patch(String id, Map<String, dynamic> body) async {
+    lastBody = body;
     if (failures.contains(id)) return null;
     return super.patch(id, body);
   }
@@ -61,4 +63,30 @@ void main() {
       isFalse,
     );
   });
+  test(
+    'edit saves approval with other transaction fields in one update',
+    () async {
+      final controller = FailureController();
+      await controller.loadForSpace('fake-personal');
+      final txn = controller.transactions.first;
+      for (final approval in ApprovalStatus.values) {
+        expect(
+          await controller.updateDetail(
+            id: txn.id,
+            category: txn.category,
+            type: txn.type,
+            reconciled: false,
+            approvalStatus: approval,
+            notes: 'Updated memo',
+          ),
+          isTrue,
+        );
+        final saved = controller.transactions.firstWhere(
+          (row) => row.id == txn.id,
+        );
+        expect(saved.approvalStatus, approval);
+        expect(controller.lastBody?['notes'], 'Updated memo');
+      }
+    },
+  );
 }

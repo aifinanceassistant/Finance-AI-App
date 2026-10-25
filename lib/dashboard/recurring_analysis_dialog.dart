@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'dash_colors.dart';
+import 'recurring_price_chart.dart';
 import 'transactions_controller.dart';
 
 Future<void> showRecurringAnalysis(
@@ -257,17 +258,16 @@ class _RecurringAnalysisScreenState extends State<RecurringAnalysisScreen> {
                   style: TextStyle(color: _changeColor(pattern), fontSize: 12),
                 ),
                 const SizedBox(height: 10),
-                SizedBox(
-                  height: 32,
-                  width: double.infinity,
-                  child: CustomPaint(
-                    painter: _PriceTrend(
-                      _list(pattern['history'])
-                          .map((row) => (row['amount'] as num).toDouble())
-                          .toList(),
-                      const Color(0xFF3B9AE0),
-                    ),
+                if (pattern['evidence'] == 'Possible')
+                  const Text(
+                    'Possible',
+                    style: TextStyle(fontSize: 11, color: Color(0xFF946200)),
                   ),
+                RecurringPriceChart(
+                  key: ValueKey('chart-${_id(pattern)}'),
+                  history: _list(pattern['history']),
+                  currency: pattern['currency'] as String,
+                  name: '${pattern['name']}',
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -359,24 +359,6 @@ class _RecurringAnalysisScreenState extends State<RecurringAnalysisScreen> {
                   'Amount range',
                   '${_money(pattern['min'], pattern['currency'] as String)} – ${_money(pattern['max'], pattern['currency'] as String)}',
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Price history',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 64,
-                  width: double.infinity,
-                  child: CustomPaint(
-                    painter: _PriceTrend(
-                      _list(pattern['history'])
-                          .map((row) => (row['amount'] as num).toDouble())
-                          .toList(),
-                      const Color(0xFF3B9AE0),
-                    ),
-                  ),
-                ),
                 const SizedBox(height: 20),
                 Text(
                   'Payment history · ${pattern['currency']}',
@@ -427,45 +409,4 @@ class _RecurringAnalysisScreenState extends State<RecurringAnalysisScreen> {
       ),
     );
   }
-}
-
-class _PriceTrend extends CustomPainter {
-  _PriceTrend(this.amounts, this.color);
-  final List<double> amounts;
-  final Color color;
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (amounts.isEmpty) {
-      return;
-    }
-    final sorted = [...amounts]..sort();
-    final low = sorted.first, high = sorted.last;
-    final path = Path();
-    for (var i = 0; i < amounts.length; i++) {
-      final x = amounts.length == 1
-          ? size.width / 2
-          : i / (amounts.length - 1) * size.width;
-      final y = high == low
-          ? size.height / 2
-          : size.height -
-                4 -
-                (amounts[i] - low) / (high - low) * (size.height - 8);
-      if (i == 0) {
-        path.moveTo(x, y);
-      } else {
-        path.lineTo(x, y);
-      }
-    }
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color
-        ..strokeWidth = 2
-        ..style = PaintingStyle.stroke,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _PriceTrend oldDelegate) =>
-      oldDelegate.amounts != amounts || oldDelegate.color != color;
 }

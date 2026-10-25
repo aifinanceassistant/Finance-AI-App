@@ -1102,6 +1102,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     var category = txn.category;
     var type = txn.type;
     var reconciled = txn.status == TxnStatus.succeeded;
+    var approval = txn.approvalStatus;
     final categoryOptions = _categoryOptionsFor(txn);
     if (!categoryOptions.contains(category)) {
       category = categoryOptions.first;
@@ -1191,36 +1192,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               children: [
                 StatusPill(status: txn.status),
                 const SizedBox(width: 8),
-                ApprovalActions(
-                  status: txn.approvalStatus,
-                  onApprove: () async {
-                    final ok = await _ctrl.setApproval(
-                      txn.id,
-                      ApprovalStatus.approved,
-                    );
-                    if (!mounted) return;
-                    if (ok) Navigator.pop(context);
-                    toast(
-                      context,
-                      ok
-                          ? _transactionFeedback(txn, 'approved')
-                          : 'Couldn’t approve ${txn.merchant}. Try again.',
-                    );
-                  },
-                  onReject: () async {
-                    final ok = await _ctrl.setApproval(
-                      txn.id,
-                      ApprovalStatus.rejected,
-                    );
-                    if (!mounted) return;
-                    if (ok) Navigator.pop(context);
-                    toast(
-                      context,
-                      ok
-                          ? _transactionFeedback(txn, 'rejected')
-                          : 'Couldn’t reject ${txn.merchant}. Try again.',
-                    );
-                  },
+                Expanded(
+                  child: DashDropdown<ApprovalStatus>(
+                    value: approval,
+                    items: ApprovalStatus.values,
+                    labelOf: _approvalLabel,
+                    onChanged: (value) => setSheetState(() => approval = value),
+                  ),
                 ),
               ],
             ),
@@ -1631,6 +1609,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 category: category,
                 type: type,
                 reconciled: reconciled,
+                approvalStatus: approval,
                 notes: notesCtrl.text.trim(),
                 contactId: contactId,
                 clearContactId: contactId == null,
